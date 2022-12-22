@@ -14,5 +14,22 @@ int main(void){
 		}
 		cout << endl;
 	}
+
+
+	// open serial port
+	cout << "Attempting to open /dev/ttyUSB0..." << endl;
+	Serial* mySerialPort = NULL;
+	try {
+		mySerialPort = new Serial("/dev/ttyUSB0", 9600U, Timeout(50,200,3,200,3), eightbits, parity_none, stopbits_one, flowcontrol_none);
+	} catch(IOException const& e){
+		cout << e.what() << endl;
+		return -1;
+	};
+	mySerialPort->flush();
+
+	// close serial port
+	mySerialPort->close();
+
+	// done	
 	return 0;
 }
