@@ -11,10 +11,13 @@ LIB_PARAMS = $(addprefix -L,$(LIB))
 
 default : serial_test
 
-serial_test : serial_test.o
+serial_test : serial_test.o mak_packet.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIB_PARAMS) $(LDFLAGS)
 
 serial_test.o : ./src/serial_test.cpp
+	$(CC) $(CFLAGS) $(INC_PARAMS) -o $@ -c $<
+
+mak_packet.o : ./src/mak_packet.c
 	$(CC) $(CFLAGS) $(INC_PARAMS) -o $@ -c $<
 
 clean :
