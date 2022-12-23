@@ -1,4 +1,4 @@
-INCLUDE=/usr/local/include ~/include
+INCLUDE=/usr/local/include ~/include ./include
 #LIB = /usr/lib /usr/local/lib /usr/local/lib/isi_api
 LIB = /usr/local/lib
 

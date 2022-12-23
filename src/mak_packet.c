@@ -8,6 +8,7 @@
  */
 
 // includes
+#include "serial/serial.h"
 #include "mak_packet.h"
 
 // compute CRC value from an array of bytes (can be one byte in length)
@@ -40,40 +41,43 @@ uint8_t crcAddBytes(uint8_t *CRC, uint8_t *byteArray, uint16_t numBytes){
 }
 
 // send a byte, stuffing an extra DLE character if necessary
-uint8_t usartWriteDLEStuff(USART_t * usartPort, char out){
+uint8_t usartWriteDLEStuff(serial::Serial* port, char out){
 
 	// write character
-	usartWriteGeneric(usartPort, out);
+    port->write((const uint8_t*)&out,1);
 
 	// repeat if character is DLE
 	if(out == DLE){
-		usartWriteGeneric(usartPort, out);
+		port->write((const uint8_t*)&out,1);
 	}
 
 	return 0;
 }
 
 // send a binary (non-ASCII) serial message with IMU measurement or configuration data
-uint8_t sendIMUSerialPacket(uint8_t packetType, uint16_t microTime, uint8_t *imuTimeBytes, uint8_t imuTimeBytesSize, uint8_t *imuDataBytes, uint8_t imuDataBytesSize){
+uint8_t sendIMUSerialPacket(serial::Serial* port, uint8_t packetType, uint16_t microTime, uint8_t *imuTimeBytes, uint8_t imuTimeBytesSize, uint8_t *imuDataBytes, uint8_t imuDataBytesSize){
 
 	uint8_t i, microTimeByte;
 	uint8_t CRC = 0x00;
+    uint8_t this_byte = 0x00;
 
 	// send start sequence
-	usartWriteGeneric(&BINARY_USART,DLE);
-	usartWriteGeneric(&BINARY_USART,STX);
+    this_byte = DLE;
+    port->write((const uint8_t*)&this_byte,1);
+    this_byte = STX;
+    port->write((const uint8_t*)&this_byte,1);
 
 	// send packet type
-	usartWriteDLEStuff(&BINARY_USART, packetType);
+	usartWriteDLEStuff(port, packetType);
 	crcAddBytes(&CRC,&packetType,1);
 
 	// send MICRO time (low byte first)
 	microTimeByte = (uint8_t)((microTime & 0x00FF));
-	usartWriteDLEStuff(&BINARY_USART, microTimeByte);
+	usartWriteDLEStuff(port, microTimeByte);
 	crcAddBytes(&CRC,&microTimeByte,1);
 
 	microTimeByte = (uint8_t)((microTime & 0xFF00) >> 8);
-	usartWriteDLEStuff(&BINARY_USART, microTimeByte);
+	usartWriteDLEStuff(port, microTimeByte);
 	crcAddBytes(&CRC,&microTimeByte,1);
 
 	// send IMU time (low byte first)
@@ -81,23 +85,25 @@ uint8_t sendIMUSerialPacket(uint8_t packetType, uint16_t microTime, uint8_t *imu
 	// them out of an array rather than from a 24- or 32-bit
 	// unsigned integer
 	for(i = 0; i < imuTimeBytesSize; i++){
-		usartWriteDLEStuff(&BINARY_USART, imuTimeBytes[i]);
+		usartWriteDLEStuff(port, imuTimeBytes[i]);
 	}
 	crcAddBytes(&CRC,imuTimeBytes,imuTimeBytesSize);
 
 	// send actual IMU data
 	// these data bytes come directly from IMU and are just passed on without processing
 	for(i = 0; i < imuDataBytesSize; i++){
-		usartWriteDLEStuff(&BINARY_USART, imuDataBytes[i]);
+		usartWriteDLEStuff(port, imuDataBytes[i]);
 	}
 	crcAddBytes(&CRC,imuDataBytes,imuDataBytesSize);
 
 	// send CRC8 checksum
-	usartWriteDLEStuff(&BINARY_USART, CRC);
+	usartWriteDLEStuff(port, CRC);
 
 	// send end sequence
-	usartWriteGeneric(&BINARY_USART, DLE);
-	usartWriteGeneric(&BINARY_USART, ETX);
+    this_byte = DLE;
+    port->write((const uint8_t*)&this_byte,1);
+    this_byte = ETX;
+    port->write((const uint8_t*)&this_byte,1);
 
 	// done
 	return 0;

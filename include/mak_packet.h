@@ -11,9 +11,8 @@
 #define MAK_PACKET_H_
 
 // includes
-#incldue "serial/serial.h"   //https://github.com/wjwwood/serial
+#include "serial/serial.h"   //https://github.com/wjwwood/serial
 #include <math.h>
-#include <util/delay.h>
 
 // application definitions
 #define PKT_TYPE_ST_DATA 		0x01
@@ -34,7 +33,7 @@
 uint8_t crcAddBytes(uint8_t *CRC, uint8_t *byteArray, uint16_t numBytes);
 
 // write a byte to the serial port, twice in the case of a DLE byte
-uint8_t usartWriteDLEStuff(USART_t * usartPort, char out);
+uint8_t usartWriteDLEStuff(serial::Serial* port, char out);
 
 // send a packet of IMU measurement or configuration data out over the serial port
 uint8_t sendIMUSerialPacket(uint8_t packetType, uint16_t microTime, uint8_t *imuTimeBytes, uint8_t imuTimeBytesSize, uint8_t *imuDataBytes, uint8_t imuDataBytesSize);
