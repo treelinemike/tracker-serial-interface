@@ -13,7 +13,7 @@ using namespace serial;
 // always updates packet length
 // updates CRC if requested
 // stuffs DLEs if requested
-int add_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t* packet, size_t* packet_length, uint8_t max_packet_length, uint8_t* CRC, bool do_update_crc, bool do_stuff_dle){
+int add_bytes_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t* packet, size_t* packet_length, uint8_t max_packet_length, uint8_t* CRC, bool do_update_crc, bool do_stuff_dle){
 
     size_t   num_bytes_added = 0;
     uint8_t* p_in            = chars_to_add;                     // pointer to first byte in the input array that we will copy
@@ -67,7 +67,7 @@ int add_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t* packe
 }
 
 // build a tracker packet 
-int compose_tracker_packet(float *q, size_t q_size, float* t, size_t t_size, uint8_t* packet, size_t *packet_length){
+int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, uint8_t tool_num, float *q, size_t q_size, float* t, size_t t_size, float trk_fit_error){
 
     int result;
 
@@ -77,42 +77,72 @@ int compose_tracker_packet(float *q, size_t q_size, float* t, size_t t_size, uin
 
     uint8_t temp_packet[max_packet_length] = {0x00};
 
-    // initialize CRC8 (polynomiax = 0x07, initial value = 0x00, final xor = 0x00, unreflected)
+    // initialize CRC8 (polynomial = 0x07, initial value = 0x00, final xor = 0x00, unreflected)
     uint8_t CRC = 0x00;
 
     // add DLE, STX
     printf("Adding DLE, STX\n");
     *temp_packet = DLE;
     *(temp_packet + 1) = STX;
-    if((result = add_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false)) != 0)
+    if((result = add_bytes_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false)) != 0)
         return result;
     printf("Done. CRC = 0x%02X\n",CRC);
 
     // add packet type
     printf("Adding packet type\n");
     *temp_packet = PKT_TYPE_TRANSFORM_DATA;
-    if((result = add_to_packet(temp_packet, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+    if((result = add_bytes_to_packet(temp_packet, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
         return result;
     printf("Done. CRC = 0x%02X\n",CRC);
 
+    // add frame number
+    printf("Adding frame number\n");
+    if((result = add_bytes_to_packet((uint8_t*)(&frame_num), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
 
+    // add tool number
+    printf("Adding tool number\n");
+    if((result = add_bytes_to_packet(&tool_num, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
+
+    // add four float32 quaternion components
+    printf("Adding quaternion\n");
     for(unsigned int qidx = 0; qidx < q_size; qidx++){
-        printf("q[%d] = %8.4f\n",qidx,*(q+qidx));
+        
+        // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each quaternion component
+        if((result = add_bytes_to_packet((uint8_t*)(q+qidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+            return result;
+        //printf("q[%d] = %8.4f\n",qidx,*(q+qidx));
+        printf("Added quaternion component. CRC = 0x%02X\n",CRC);
     } 
 
+    // add three float32 translation components
+    printf("Adding translation\n");
     for(unsigned int tidx = 0; tidx < t_size; tidx++){
-        printf("t[%d] = %8.4f\n",tidx,*(t+tidx));
+        // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each translation component
+        if((result = add_bytes_to_packet((uint8_t*)(t+tidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+            return result;
+        //printf("t[%d] = %8.4f\n",tidx,*(t+tidx));
+        printf("Added translation component. CRC = 0x%02X\n",CRC);
     } 
+
+    // add error as reported by tracker
+    printf("Adding tracking error\n");
+    if((result = add_bytes_to_packet((uint8_t*)(&trk_fit_error), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
 
     // add CRC
-    if((result = add_to_packet(&CRC, 1, packet, packet_length, max_packet_length, &CRC, false, true)) != 0)
+    if((result = add_bytes_to_packet(&CRC, 1, packet, packet_length, max_packet_length, &CRC, false, true)) != 0)
         return result;
     
     // add DLE, ETX
     *temp_packet = DLE;
     *(temp_packet + 1) = ETX;
-    if(add_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false) != 0)
-        return -1;
+    if((result = add_bytes_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false)) != 0)
+        return result;
 
     // done
     return 0;
@@ -146,28 +176,33 @@ int main(void){
     //printf("0x%02X%02X%02X%02X\n", *p_fval, *(p_fval+1), *(p_fval+2), *(p_fval+3));
 
 
-
     // build a sample packet
-    float q[SIZE_Q] = {1.2,2.3,3.4,4.5};
-    float t[SIZE_T] = {5.6,6.7,7.8};
     uint8_t mypacket[MAX_PACKET_LENGTH] = {0x00};
     size_t mypacket_length = MAX_PACKET_LENGTH;
+    
+    uint32_t frame_num = 4011;
+    uint8_t tool_num = 2;
+    float q[SIZE_Q] = {1.2,2.3,3.4,4.5};
+    //float q[SIZE_Q] = {1.2,2.3,3.4,4.501953}; // force a DLE stuff in q[3]
+    float t[SIZE_T] = {5.6,6.7,7.8};
+    float trk_fit_err = 0.2537;
+    
     int result = 0;
-    result = compose_tracker_packet(q,SIZE_Q,t,SIZE_T,mypacket,&mypacket_length);
+    result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
     if( result != 0 ){
         printf("Error: unexpected result from packet composition (%d)\n",result);
         return -1;
     }
 
-    uint8_t* p_byte = mypacket;
 
+    // display packet
+    uint8_t* p_byte = mypacket;
     printf("Packet (len = %ld): ",mypacket_length); 
     while( p_byte < (mypacket + mypacket_length) ){
         printf("0x%02X ",*p_byte);
         ++p_byte;
     }
     printf("\n");
-
 
 
     // list serial ports 
@@ -192,15 +227,9 @@ int main(void){
     mySerialPort->flush();
 
 
-    // try to write something to serial port
-    mySerialPort->write("Hello, world!\r\n");
+    // write packet to serial port
+    mySerialPort->write(mypacket,mypacket_length);
 
-
-    // test some functions
-    usartWriteDLEStuff(mySerialPort,'A');
-    usartWriteDLEStuff(mySerialPort,DLE);
-    usartWriteDLEStuff(mySerialPort,'\r');
-    usartWriteDLEStuff(mySerialPort,'\n');
 
     // close serial port
     cout << "Closing serial port" << endl;
