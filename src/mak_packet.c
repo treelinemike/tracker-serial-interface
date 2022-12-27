@@ -27,7 +27,7 @@ uint8_t crcAddBytes(uint8_t *CRC, uint8_t *byteArray, uint16_t numBytes){
 			doInvert = thisBit ^ ((*CRC & 0x80) >> 7);			// new bit0
 			*CRC = *CRC << 1;									// bitshift left by 1 position
 			if(doInvert){
-				*CRC = *CRC ^ 0b00110001;						// if input bit is 1, invert using x^8 + x^5 + x^4 + 1 polynomial
+				*CRC = *CRC ^ 0b00000111;						// if input bit is 1, invert using x^2 + x + 1 polynomial (0x7)
 			}
 		}
 
