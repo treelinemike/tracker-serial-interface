@@ -31,11 +31,11 @@
 /* * * * * Function Prototypes * * * * */
 
 // build a tracker transform data packet
-int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, uint8_t tool_num, float *q, size_t q_size, float* t, size_t t_size, float trk_fit_error)
+int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, uint8_t tool_num, float *q, size_t q_size, float* t, size_t t_size, float trk_fit_error);
 
 // add some number of bytes to a byte array serial packet
 // stuffing DLE and/or updating CRC if required
-int add_bytes_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t* packet, size_t* packet_length, uint8_t max_packet_length, uint8_t* CRC, bool update_crc_flag, bool stuff_dle_flag
+int add_bytes_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t* packet, size_t* packet_length, uint8_t max_packet_length, uint8_t* CRC, bool update_crc_flag, bool stuff_dle_flag);
 
 // compute CRC value from an array of bytes (can be one byte in length)
 uint8_t crcAddBytes(uint8_t *CRC, uint8_t *byteArray, uint16_t numBytes);
