@@ -11,7 +11,7 @@ int compose_tracker_packet(char *q, char* t, char* packet, int packet_length){
 }
 
 int main(void){
-	cout << "Hello World!" << endl;
+	cout << "Hello World!" << __linux__ << endl;
 	vector<PortInfo> all_ports = list_ports();
 	if (all_ports.size() > 0) {
 		cout << "Available COM ports:" << endl;
@@ -37,6 +37,14 @@ int main(void){
     // try to write something to serial port
     mySerialPort->write("Hello, world!\r\n");
 
+    // test conversion
+    //double
+    static_assert(sizeof(float)==4,"Float size is not four bytes!"); 
+    cout << "Size of float: " << sizeof(float)<< endl;
+    static float test_float = 1.254;
+    constexpr uint8_t* p_fval = (uint8_t*) &test_float;
+    printf("0x%02X%02X%02X%02X\n", *p_fval, *(p_fval+1), *(p_fval+2), *(p_fval+3));
+    static_assert(*p_fval == 12,"Not a litle endian system!");
 
     // test some functions
     usartWriteDLEStuff(mySerialPort,'A');
