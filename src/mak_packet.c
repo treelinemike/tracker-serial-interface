@@ -2,14 +2,153 @@
  *
  * Custom serial packet definitions.
  *
- * Updated:  2022-12-22
+ * Updated:  2022-12-27
  * Author: 	 M. Kokko
  *
  */
 
 // includes
-#include "serial/serial.h"
 #include "mak_packet.h"
+
+// add bytes to a tracker packet
+// always updates packet length
+// updates CRC if requested
+// stuffs DLEs if requested
+int add_bytes_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t* packet, size_t* packet_length, uint8_t max_packet_length, uint8_t* CRC, bool update_crc_flag, bool stuff_dle_flag){
+
+    size_t   num_bytes_added = 0;
+    uint8_t* p_in            = chars_to_add;                     // pointer to first byte in the input array that we will copy
+    uint8_t* p_in_end        = chars_to_add + num_chars_to_add;  // pointer to first byte beyond end of input array
+    uint8_t* p_out_start     = packet + *packet_length;          // pointer to first byte we will add to the packet
+    uint8_t* p_out_end       = packet+max_packet_length;         // pointer to first byte beyond end of output array allocation
+    uint8_t* p_out           = p_out_start;                      // pointer to first byte in the output array that we will write to
+
+    // iterate through all input bytes
+    while(p_in < p_in_end){
+
+        // add byte to output as long as there is room in the output buffer allocation
+        if( p_out < p_out_end ){
+
+            // copy input byte into output (no reason to use memcpy here?)
+            *p_out = *p_in;
+
+            // update CRC
+            if(update_crc_flag){
+                crcAddBytes(CRC,p_out,1);
+            }
+
+            // stuff DLE
+            if(stuff_dle_flag && (*p_out == DLE)){
+                if((p_out + 1) < p_out_end){
+                    ++p_out;
+                    *p_out = DLE;
+                    ++num_bytes_added;
+                } else {
+                    printf("Error stuffing DLE: insufficient packet buffer size\n");
+                    return -2;
+                }
+            }
+
+            // increment input, output, and num_bytes_added
+            ++p_in;
+            ++p_out;
+            ++num_bytes_added;
+        } else {
+            printf("Error adding byte: insufficient packet buffer size\n");
+            return -1;
+        }
+    }
+
+    // update packet length
+    *packet_length += num_bytes_added;
+    // TODO: assert(*packet_length <= max_packet_length)
+    
+    // done
+    return 0;
+}
+
+// build a tracker packet 
+int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, uint8_t tool_num, float *q, size_t q_size, float* t, size_t t_size, float trk_fit_error){
+
+    int result;
+
+    // grab max packet length from input before resetting
+    size_t max_packet_length = *packet_length;
+    *packet_length = 0;
+
+    uint8_t temp_packet[max_packet_length] = {0x00};
+
+    // initialize CRC8 (polynomial = 0x07, initial value = 0x00, final xor = 0x00, unreflected)
+    uint8_t CRC = 0x00;
+
+    // add DLE, STX
+    printf("Adding DLE, STX\n");
+    *temp_packet = DLE;
+    *(temp_packet + 1) = STX;
+    if((result = add_bytes_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
+
+    // add packet type
+    printf("Adding packet type\n");
+    *temp_packet = PKT_TYPE_TRANSFORM_DATA;
+    if((result = add_bytes_to_packet(temp_packet, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
+
+    // add frame number
+    printf("Adding frame number\n");
+    if((result = add_bytes_to_packet((uint8_t*)(&frame_num), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
+
+    // add tool number
+    printf("Adding tool number\n");
+    if((result = add_bytes_to_packet(&tool_num, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
+
+    // add four float32 quaternion components
+    printf("Adding quaternion\n");
+    for(unsigned int qidx = 0; qidx < q_size; qidx++){
+        
+        // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each quaternion component
+        if((result = add_bytes_to_packet((uint8_t*)(q+qidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+            return result;
+        //printf("q[%d] = %8.4f\n",qidx,*(q+qidx));
+        printf("Added quaternion component. CRC = 0x%02X\n",CRC);
+    } 
+
+    // add three float32 translation components
+    printf("Adding translation\n");
+    for(unsigned int tidx = 0; tidx < t_size; tidx++){
+        // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each translation component
+        if((result = add_bytes_to_packet((uint8_t*)(t+tidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+            return result;
+        //printf("t[%d] = %8.4f\n",tidx,*(t+tidx));
+        printf("Added translation component. CRC = 0x%02X\n",CRC);
+    } 
+
+    // add error as reported by tracker
+    printf("Adding tracking error\n");
+    if((result = add_bytes_to_packet((uint8_t*)(&trk_fit_error), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+    printf("Done. CRC = 0x%02X\n",CRC);
+
+    // add CRC
+    if((result = add_bytes_to_packet(&CRC, 1, packet, packet_length, max_packet_length, &CRC, false, true)) != 0)
+        return result;
+    
+    // add DLE, ETX
+    *temp_packet = DLE;
+    *(temp_packet + 1) = ETX;
+    if((result = add_bytes_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false)) != 0)
+        return result;
+
+    // done
+    return 0;
+}
+
 
 // compute CRC value from an array of bytes (can be one byte in length)
 uint8_t crcAddBytes(uint8_t *CRC, uint8_t *byteArray, uint16_t numBytes){
@@ -38,103 +177,4 @@ uint8_t crcAddBytes(uint8_t *CRC, uint8_t *byteArray, uint16_t numBytes){
 
 	// return, no error handling
 	return 0;
-}
-
-// send a byte, stuffing an extra DLE character if necessary
-uint8_t usartWriteDLEStuff(serial::Serial* port, char out){
-
-	// write character
-    port->write((const uint8_t*)&out,1);
-
-	// repeat if character is DLE
-	if(out == DLE){
-		port->write((const uint8_t*)&out,1);
-	}
-
-	return 0;
-}
-
-// send a binary (non-ASCII) serial message with IMU measurement or configuration data
-uint8_t sendIMUSerialPacket(serial::Serial* port, uint8_t packetType, uint16_t microTime, uint8_t *imuTimeBytes, uint8_t imuTimeBytesSize, uint8_t *imuDataBytes, uint8_t imuDataBytesSize){
-
-	uint8_t i, microTimeByte;
-	uint8_t CRC = 0x00;
-    uint8_t this_byte = 0x00;
-
-	// send start sequence
-    this_byte = DLE;
-    port->write((const uint8_t*)&this_byte,1);
-    this_byte = STX;
-    port->write((const uint8_t*)&this_byte,1);
-
-	// send packet type
-	usartWriteDLEStuff(port, packetType);
-	crcAddBytes(&CRC,&packetType,1);
-
-	// send MICRO time (low byte first)
-	microTimeByte = (uint8_t)((microTime & 0x00FF));
-	usartWriteDLEStuff(port, microTimeByte);
-	crcAddBytes(&CRC,&microTimeByte,1);
-
-	microTimeByte = (uint8_t)((microTime & 0xFF00) >> 8);
-	usartWriteDLEStuff(port, microTimeByte);
-	crcAddBytes(&CRC,&microTimeByte,1);
-
-	// send IMU time (low byte first)
-	// these bytes come directly from chip so we read
-	// them out of an array rather than from a 24- or 32-bit
-	// unsigned integer
-	for(i = 0; i < imuTimeBytesSize; i++){
-		usartWriteDLEStuff(port, imuTimeBytes[i]);
-	}
-	crcAddBytes(&CRC,imuTimeBytes,imuTimeBytesSize);
-
-	// send actual IMU data
-	// these data bytes come directly from IMU and are just passed on without processing
-	for(i = 0; i < imuDataBytesSize; i++){
-		usartWriteDLEStuff(port, imuDataBytes[i]);
-	}
-	crcAddBytes(&CRC,imuDataBytes,imuDataBytesSize);
-
-	// send CRC8 checksum
-	usartWriteDLEStuff(port, CRC);
-
-	// send end sequence
-    this_byte = DLE;
-    port->write((const uint8_t*)&this_byte,1);
-    this_byte = ETX;
-    port->write((const uint8_t*)&this_byte,1);
-
-	// done
-	return 0;
-}
-
-
-// convert two bytes to half precision float
-// this function is for debug purposes only, data should not
-// be converted on embedded device
-float uint16_to_float16(uint16_t uint16_value){
-	float float16_value = 0x0000;
-	float signbit  = (float)((uint16_value & 0x8000)>>15);
-	float exponent = (float)((uint16_value & 0x7C00)>>10);
-	float mantissa = (float)((uint16_value & 0x03FF)>>0);
-
-	float signfactor = pow(-1,signbit);
-
-	if(exponent == 0){
-		if(mantissa == 0){
-			float16_value = (signfactor) * 0;
-		} else {
-			float16_value = (float)(signfactor * (pow(2,-14)) * (0 + mantissa*pow(2,-10)));
-		}
-	} else if(exponent == 31){
-		if(mantissa == 0){
-			float16_value = (signfactor) * INFINITY;
-		} else {
-			float16_value = NAN;
-		}
-	} else {
-		float16_value = (double)(signfactor * pow(2,(exponent-15)) * (1+mantissa*pow(2,-10)));
-	}
-	return float16_value;
 }
