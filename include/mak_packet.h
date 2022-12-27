@@ -11,6 +11,7 @@
 #define MAK_PACKET_H_
 
 // includes
+#include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
 
