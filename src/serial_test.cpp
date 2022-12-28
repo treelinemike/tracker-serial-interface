@@ -21,6 +21,17 @@ void onErrorPrintDebugMessage(std::string methodName, int errorCode)
 	}
 }
 
+// function from NDI to get tool info
+std::string getToolInfo(std::string toolHandle)
+{
+	// Get the port handle info from PHINF
+	PortHandleInfo info = capi.portHandleInfo(toolHandle);
+
+	// Return the ID and SerialNumber the desired string format
+	std::string outputString = info.getToolId();
+	outputString.append(" s/n:").append(info.getSerialNumber());
+	return outputString;
+}
 
 // function from NDI to initialize and enable tools
 void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
