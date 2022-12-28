@@ -1,8 +1,13 @@
 #include "serial/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
+#include <CombinedApi.h>
 #include <iostream>
 using namespace std;
 using namespace serial;
+
+static CombinedApi capi = CombinedApi();
+static bool apiSupportsBX2 = false;
+static bool apiSupportsStreaming = false;
 
 
 int main(void){
@@ -72,7 +77,7 @@ int main(void){
         cout << endl;
     }
 
-    // open serial port
+    // open serial port for connection to client device (not the tracker)
     cout << "Attempting to open /dev/ttyUSB0..." << endl;
     Serial* mySerialPort = NULL;
     try {
@@ -83,6 +88,11 @@ int main(void){
     };
     mySerialPort->flush();
 
+    // open connection to trakcer
+    if(capi.connect("/dev/ttyUSB0") != 0){
+        printf("Error connecting to NDI API...\r");
+    }
+        
 
     // write packet to serial port
     mySerialPort->write(mypacket,mypacket_length);

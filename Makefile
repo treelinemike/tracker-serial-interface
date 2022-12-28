@@ -1,10 +1,10 @@
-INCLUDE=/usr/local/include ~/include ./include
+INCLUDE=/usr/local/include /usr/local/include/ndicapi ~/include ./include /usr/lo
 #LIB = /usr/lib /usr/local/lib /usr/local/lib/isi_api
 LIB = /usr/local/lib
 
 CC = g++
 CFLAGS = -no-pie -pthread -Wall
-LDFLAGS = -lserial -lrt -lpthread
+LDFLAGS = -lserial -lrt -lpthread -lndicapi
 
 INC_PARAMS = $(addprefix -I,$(INCLUDE))
 LIB_PARAMS = $(addprefix -L,$(LIB))
