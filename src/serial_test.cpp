@@ -2,6 +2,9 @@
 #include "mak_packet.h"
 #include <CombinedApi.h>
 #include <iostream>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
 using namespace std;
 using namespace serial;
 
@@ -12,7 +15,8 @@ static bool apiSupportsStreaming = false;
 
 int main(void){
 
-    // ensure linux system
+
+    // ensure that we're on a linux system
     // TODO: handle Windows, darwin, etc.
     if(!__linux__){
         printf("Error: not running on a linux system\n");
@@ -78,7 +82,7 @@ int main(void){
     }
 
     // open serial port for connection to client device (not the tracker)
-    cout << "Attempting to open /dev/ttyUSB0..." << endl;
+    cout << "Attempting to open /dev/ttyUSB0...";
     Serial* mySerialPort = NULL;
     try {
         mySerialPort = new Serial("/dev/ttyUSB0", 115200U, Timeout(50,200,3,200,3), eightbits, parity_none, stopbits_one, flowcontrol_none);
@@ -87,13 +91,32 @@ int main(void){
         return -1;
     };
     mySerialPort->flush();
+    cout << "done." << endl;
 
+    
     // open connection to trakcer
+    // TODO: fix port, ideally figure it out dynamically
     if(capi.connect("/dev/ttyUSB0") != 0){
         printf("Error connecting to NDI API...\r");
     }
-        
 
+    // sleep for a second (NDI required?)
+    sleep(1);    
+
+    // get NDI device firmware version?
+    cout << capi.getUserParameter("Features.Firmware.Version") << endl;
+
+    // attempt to initialize NDI common API
+    if( (result = capi.initialize()) < 0 ){
+        cout << "Error initializing NDI common api: " << capi.errorToString(result) << endl;
+        return -1;
+    }
+
+    // initialize and enable tools
+    std::vector<ToolData> enabledTools = std::vector<ToolData>();
+    initializeAndEnableTools(enabledTools);
+
+    
     // write packet to serial port
     mySerialPort->write(mypacket,mypacket_length);
 
