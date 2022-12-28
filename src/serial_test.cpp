@@ -4,6 +4,13 @@
 #include <iostream>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <string>
+
+#define AURORA_PORT_DESC "NDI Aurora"
+#define CLIENT_PORT_DESC "Prolific Technology"
+
+#define REQUIRE_AURORA false
+#define REQUIRE_CLIENT false
 
 using namespace std;
 using namespace serial;
@@ -123,16 +130,55 @@ int main(void){
 
 
     // list serial ports 
+    std::string aurora_port_string = "";
+    std::string client_port_string = "";
     vector<PortInfo> all_ports = list_ports();
     if (all_ports.size() > 0) {
-        cout << "Available COM ports:" << endl;
+        
+        // look through all COM ports
+        cout << "Searching available COM ports..." << endl;
         for (unsigned int i = 0; i < all_ports.size(); i++) {
-            cout << "* " << all_ports[i].port << " (" << all_ports[i].description << " / " << all_ports[i].hardware_id << ")" << endl;
+            
+            // check for Aurora port
+            if( all_ports[i].description.find(AURORA_PORT_DESC) != std::string::npos){
+                if(!aurora_port_string.empty()){
+                    printf("Error: multiple Aurora ports found!\n");
+                    return -1;
+                }
+                aurora_port_string = all_ports[i].port;
+                cout << "Found Aurora on " << aurora_port_string << endl;
+            }
+
+            // check for client port
+            if( all_ports[i].description.find(CLIENT_PORT_DESC) != std::string::npos){
+                if(!client_port_string.empty()){
+                    printf("Error: multiple client ports found!\n");
+                    return -1;
+                }
+                client_port_string = all_ports[i].port;
+                cout << "Found client on " << client_port_string << endl;
+            }
+
         }
-        cout << endl;
+
+        // make sure we've found both a client and an Aurora port
+        if( aurora_port_string.empty() ){
+            cout << "Error: no Aurora port found" << endl;
+            if(REQUIRE_AURORA)
+                return -1;
+        }
+        if( client_port_string.empty() ) {
+            cout << "Error: no client port found" << endl;
+            if(REQUIRE_CLIENT) 
+                return -1;
+        }
+            
+
+    } else {
+        cout << "No ports found!" << endl;
     }
 
-    // open serial port for connection to client device (not the tracker)
+    // open client serial port (not the tracker)
     cout << "Attempting to open /dev/ttyUSB0...";
     Serial* mySerialPort = NULL;
     try {
@@ -145,9 +191,8 @@ int main(void){
     cout << "done." << endl;
 
     
-    // open connection to trakcer
-    // TODO: fix port, ideally figure it out dynamically
-    if(capi.connect("/dev/ttyUSB0") != 0){
+    // open aurora serial port
+    if(capi.connect(aurora_port_string) != 0){
         printf("Error connecting to NDI API...\r");
     }
 
@@ -156,6 +201,8 @@ int main(void){
 
     // get NDI device firmware version?
     cout << capi.getUserParameter("Features.Firmware.Version") << endl;
+
+    // determine support for BX2
 
     // attempt to initialize NDI common API
     if( (result = capi.initialize()) < 0 ){
@@ -167,7 +214,8 @@ int main(void){
     std::vector<ToolData> enabledTools = std::vector<ToolData>();
     initializeAndEnableTools(enabledTools);
 
-    
+    cout << "Found " << enabledTools.size() << " tools" << endl;
+
     // write packet to serial port
     mySerialPort->write(mypacket,mypacket_length);
 
