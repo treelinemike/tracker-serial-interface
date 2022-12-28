@@ -3,7 +3,7 @@
 #include <CombinedApi.h>
 #include <iostream>
 #include <unistd.h>
-#xinclude <sys/ioctl.h>
+#include <sys/ioctl.h>
 
 using namespace std;
 using namespace serial;
