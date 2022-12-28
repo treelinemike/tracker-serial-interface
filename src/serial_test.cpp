@@ -3,7 +3,7 @@
 #include <CombinedApi.h>
 #include <iostream>
 #include <unistd.h>
-#include <sys/ioctl.h>
+#xinclude <sys/ioctl.h>
 
 using namespace std;
 using namespace serial;
@@ -11,6 +11,46 @@ using namespace serial;
 static CombinedApi capi = CombinedApi();
 static bool apiSupportsBX2 = false;
 static bool apiSupportsStreaming = false;
+
+// function from NDI to show error codes on failureS
+void onErrorPrintDebugMessage(std::string methodName, int errorCode)
+{
+	if (errorCode < 0)
+	{
+		std::cout << methodName << " failed: " << capi.errorToString(errorCode) << std::endl;
+	}
+}
+
+
+// function from NDI to initialize and enable tools
+void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
+{
+	std::cout << std::endl << "Initializing and enabling tools..." << std::endl;
+
+	// Initialize and enable tools
+	std::vector<PortHandleInfo> portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::NotInit);
+	for (int i = 0; i < portHandles.size(); i++)
+	{
+		onErrorPrintDebugMessage("capi.portHandleInitialize()", capi.portHandleInitialize(portHandles[i].getPortHandle()));
+		onErrorPrintDebugMessage("capi.portHandleEnable()", capi.portHandleEnable(portHandles[i].getPortHandle()));
+	}
+
+	// Print all enabled tools
+	portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::Enabled);
+	for (int i = 0; i < portHandles.size(); i++)
+	{
+		std::cout << portHandles[i].toString() << std::endl;
+	}
+
+    // Lookup and store the serial number for each enabled tool
+    for (int i = 0; i < portHandles.size(); i++)
+    {
+        enabledTools.push_back(ToolData());
+        enabledTools.back().transform.toolHandle = (uint16_t)capi.stringToInt(portHandles[i].getPortHandle());
+        enabledTools.back().toolInfo = getToolInfo(portHandles[i].getPortHandle());
+    }
+}
+
 
 
 int main(void){
