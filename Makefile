@@ -9,12 +9,12 @@ LDFLAGS = -lserial -lrt -lpthread -lndicapi
 INC_PARAMS = $(addprefix -I,$(INCLUDE))
 LIB_PARAMS = $(addprefix -L,$(LIB))
 
-default : serial_test
+default : track_server
 
-serial_test : serial_test.o mak_packet.o
+track_server : track_server.o mak_packet.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIB_PARAMS) $(LDFLAGS)
 
-serial_test.o : ./src/serial_test.cpp
+track_server.o : ./src/track_server.cpp
 	$(CC) $(CFLAGS) $(INC_PARAMS) -o $@ -c $<
 
 mak_packet.o : ./src/mak_packet.c
