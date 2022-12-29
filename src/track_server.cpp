@@ -12,6 +12,11 @@
 #define REQUIRE_AURORA false
 #define REQUIRE_CLIENT false
 
+#define USE_STATIC_PORTS true
+#define STATIC_PORT_CLIENT "/dev/ttyUSB0"
+#define STATIC_PORT_AURORA "/dev/ttyUSB1"
+
+
 using namespace std;
 using namespace serial;
 
@@ -133,50 +138,56 @@ int main(void){
     // list serial ports 
     std::string aurora_port_string = "";
     std::string client_port_string = "";
-    vector<PortInfo> all_ports = list_ports();
-    if (all_ports.size() > 0) {
 
-        // look through all COM ports
-        cout << "Searching available COM ports..." << endl;
-        for (unsigned int i = 0; i < all_ports.size(); i++) {
-
-            // check for Aurora port
-            if( all_ports[i].description.find(AURORA_PORT_DESC) != std::string::npos){
-                if(!aurora_port_string.empty()){
-                    printf("Error: multiple Aurora ports found!\n");
-                    return -1;
-                }
-                aurora_port_string = all_ports[i].port;
-                cout << "Found Aurora on " << aurora_port_string << endl;
-            }
-
-            // check for client port
-            if( all_ports[i].description.find(CLIENT_PORT_DESC) != std::string::npos){
-                if(!client_port_string.empty()){
-                    printf("Error: multiple client ports found!\n");
-                    return -1;
-                }
-                client_port_string = all_ports[i].port;
-                cout << "Found client on " << client_port_string << endl;
-            }
-
-        }
-
-        // make sure we've found both a client and an Aurora port
-        if( aurora_port_string.empty() ){
-            cout << "Error: no Aurora port found" << endl;
-            if(REQUIRE_AURORA)
-                return -1;
-        }
-        if( client_port_string.empty() ) {
-            cout << "Error: no client port found" << endl;
-            if(REQUIRE_CLIENT) 
-                return -1;
-        }
-
-
+    if(USE_STATIC_PORTS){
+        aurora_port_string = std::string(STATIC_PORT_AURORA);
+        client_port_string = std::string(STATIC_PORT_CLIENT);
     } else {
-        cout << "No ports found!" << endl;
+        vector<PortInfo> all_ports = list_ports();
+        if (all_ports.size() > 0) {
+
+            // look through all COM ports
+            cout << "Searching available COM ports..." << endl;
+            for (unsigned int i = 0; i < all_ports.size(); i++) {
+
+                // check for Aurora port
+                if( all_ports[i].description.find(AURORA_PORT_DESC) != std::string::npos){
+                    if(!aurora_port_string.empty()){
+                        printf("Error: multiple Aurora ports found!\n");
+                        return -1;
+                    }
+                    aurora_port_string = all_ports[i].port;
+                    cout << "Found Aurora on " << aurora_port_string << endl;
+                }
+
+                // check for client port
+                if( all_ports[i].description.find(CLIENT_PORT_DESC) != std::string::npos){
+                    if(!client_port_string.empty()){
+                        printf("Error: multiple client ports found!\n");
+                        return -1;
+                    }
+                    client_port_string = all_ports[i].port;
+                    cout << "Found client on " << client_port_string << endl;
+                }
+
+            }
+
+            // make sure we've found both a client and an Aurora port
+            if( aurora_port_string.empty() ){
+                cout << "Error: no Aurora port found" << endl;
+                if(REQUIRE_AURORA)
+                    return -1;
+            }
+            if( client_port_string.empty() ) {
+                cout << "Error: no client port found" << endl;
+                if(REQUIRE_CLIENT) 
+                    return -1;
+            }
+
+
+        } else {
+            cout << "No ports found!" << endl;
+        }
     }
 
     // open client serial port (not the tracker)
