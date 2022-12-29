@@ -21,4 +21,4 @@ mak_packet.o : ./src/mak_packet.c
 	$(CC) $(CFLAGS) $(INC_PARAMS) -o $@ -c $<
 
 clean :
-	rm -r serial_test.o
+	rm -r *.o
