@@ -22,43 +22,44 @@ static bool apiSupportsStreaming = false;
 // function from NDI to show error codes on failureS
 void onErrorPrintDebugMessage(std::string methodName, int errorCode)
 {
-	if (errorCode < 0)
-	{
-		std::cout << methodName << " failed: " << capi.errorToString(errorCode) << std::endl;
-	}
+    if (errorCode < 0)
+    {
+        std::cout << methodName << " failed: " << capi.errorToString(errorCode) << std::endl;
+    }
 }
 
 // function from NDI to get tool info
 std::string getToolInfo(std::string toolHandle)
 {
-	// Get the port handle info from PHINF
-	PortHandleInfo info = capi.portHandleInfo(toolHandle);
+    // Get the port handle info from PHINF
+    PortHandleInfo info = capi.portHandleInfo(toolHandle);
 
-	// Return the ID and SerialNumber the desired string format
-	std::string outputString = info.getToolId();
-	outputString.append(" s/n:").append(info.getSerialNumber());
-	return outputString;
+    // Return the ID and SerialNumber the desired string format
+    std::string outputString = info.getToolId();
+    outputString.append(" s/n:").append(info.getSerialNumber());
+    return outputString;
 }
 
 // function from NDI to initialize and enable tools
 void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
 {
-	std::cout << std::endl << "Initializing and enabling tools..." << std::endl;
+    std::cout << std::endl << "Initializing and enabling tools..." << std::endl;
 
-	// Initialize and enable tools
-	std::vector<PortHandleInfo> portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::NotInit);
-	for (int i = 0; i < portHandles.size(); i++)
-	{
-		onErrorPrintDebugMessage("capi.portHandleInitialize()", capi.portHandleInitialize(portHandles[i].getPortHandle()));
-		onErrorPrintDebugMessage("capi.portHandleEnable()", capi.portHandleEnable(portHandles[i].getPortHandle()));
-	}
+    // Initialize and enable tools
+    std::vector<PortHandleInfo> portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::NotInit);
+    cout << "Number of port handles found: " << portHandles.size() << endl;
+    for (int i = 0; i < portHandles.size(); i++)
+    {
+        onErrorPrintDebugMessage("capi.portHandleInitialize()", capi.portHandleInitialize(portHandles[i].getPortHandle()));
+        onErrorPrintDebugMessage("capi.portHandleEnable()", capi.portHandleEnable(portHandles[i].getPortHandle()));
+    }
 
-	// Print all enabled tools
-	portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::Enabled);
-	for (int i = 0; i < portHandles.size(); i++)
-	{
-		std::cout << portHandles[i].toString() << std::endl;
-	}
+    // Print all enabled tools
+    portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::Enabled);
+    for (int i = 0; i < portHandles.size(); i++)
+    {
+        std::cout << portHandles[i].toString() << std::endl;
+    }
 
     // Lookup and store the serial number for each enabled tool
     for (int i = 0; i < portHandles.size(); i++)
@@ -103,14 +104,14 @@ int main(void){
     // build a sample packet
     uint8_t mypacket[MAX_PACKET_LENGTH] = {0x00};
     size_t mypacket_length = MAX_PACKET_LENGTH;
-    
+
     uint32_t frame_num = 4011;
     uint8_t tool_num = 2;
     float q[SIZE_Q] = {1.2,2.3,3.4,4.5};
     //float q[SIZE_Q] = {1.2,2.3,3.4,4.501953}; // force a DLE stuff in q[3]
     float t[SIZE_T] = {5.6,6.7,7.8};
     float trk_fit_err = 0.2537;
-    
+
     int result = 0;
     result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
     if( result != 0 ){
@@ -134,11 +135,11 @@ int main(void){
     std::string client_port_string = "";
     vector<PortInfo> all_ports = list_ports();
     if (all_ports.size() > 0) {
-        
+
         // look through all COM ports
         cout << "Searching available COM ports..." << endl;
         for (unsigned int i = 0; i < all_ports.size(); i++) {
-            
+
             // check for Aurora port
             if( all_ports[i].description.find(AURORA_PORT_DESC) != std::string::npos){
                 if(!aurora_port_string.empty()){
@@ -172,7 +173,7 @@ int main(void){
             if(REQUIRE_CLIENT) 
                 return -1;
         }
-            
+
 
     } else {
         cout << "No ports found!" << endl;
@@ -182,7 +183,7 @@ int main(void){
     cout << "Attempting to open /dev/ttyUSB0...";
     Serial* mySerialPort = NULL;
     try {
-        mySerialPort = new Serial("/dev/ttyUSB0", 115200U, Timeout(50,200,3,200,3), eightbits, parity_none, stopbits_one, flowcontrol_none);
+        mySerialPort = new Serial(client_port_string, 115200U, Timeout(50,200,3,200,3), eightbits, parity_none, stopbits_one, flowcontrol_none);
     } catch(IOException const& e){
         cout << e.what() << endl;
         return -1;
@@ -190,7 +191,7 @@ int main(void){
     mySerialPort->flush();
     cout << "done." << endl;
 
-    
+
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
         printf("Error connecting to NDI API...\r");
@@ -210,14 +211,93 @@ int main(void){
         return -1;
     }
 
+    // THIS SLEEP IS SUPER IMPORTANT!
+    // WITHOUT IT PORT HANDLES ARE NOT DISCOVERED CORRECTLY
+    sleep(1);
+
+    cout << capi.getTrackingDataTX() << endl;
+
+    // configure user parameters (can we skip?)
+
     // initialize and enable tools
     std::vector<ToolData> enabledTools = std::vector<ToolData>();
     initializeAndEnableTools(enabledTools);
 
-    cout << "Found " << enabledTools.size() << " tools" << endl;
+    cout << "Number of tools found: " << enabledTools.size() << endl;
 
-    // write packet to serial port
-    mySerialPort->write(mypacket,mypacket_length);
+    // enter tracking mode
+    cout << "Entering tracking mode" << endl;
+    if( capi.startTracking() < 0 ){
+        cout << "Error entering tracking mode." << endl;
+        return -1;
+    }
+
+    sleep(1);
+
+    for(int cap_num = 0; cap_num < 20; cap_num++){
+        // get a set of transforms
+        std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
+        cout << "Size of new tool data vector: " << newToolData.size() << endl;
+
+        // copy tool transform data into enabledTools vector
+        // double loop structure from NDI sample program
+        // likely b/c tool data may come in in a different order than the enabledTools vector?
+        for(int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
+            for(int data_idx = 0; data_idx < newToolData.size(); data_idx++){
+                if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
+                    newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
+                    enabledTools[tool_idx] = newToolData[data_idx];
+                    cout << "Captured frame number: " << newToolData[data_idx].frameNumber << endl;               
+                    if( enabledTools[tool_idx].transform.isMissing() ){
+                        cout << "***** MISSING *****" << endl;
+                    } else {
+                        cout << "Transform status: " << newToolData[data_idx].transform.status << endl;
+                        cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
+                    }
+                }
+            }
+        } 
+
+        // construct and send a packet for each tool
+        for(int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
+
+            cout << " Tool " << tool_idx << "[" << enabledTools[tool_idx].toolInfo << "]: ";
+            if( enabledTools[tool_idx].transform.isMissing() ){
+                cout << "MISSING" << endl;
+            } else {
+
+                frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
+                tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
+                q[0] = (float)enabledTools[tool_idx].transform.q0;
+                q[1] = (float)enabledTools[tool_idx].transform.qx;
+                q[2] = (float)enabledTools[tool_idx].transform.qy;
+                q[3] = (float)enabledTools[tool_idx].transform.qz;
+                t[0] = (float)enabledTools[tool_idx].transform.tx;
+                t[1] = (float)enabledTools[tool_idx].transform.ty;
+                t[2] = (float)enabledTools[tool_idx].transform.tz;
+                trk_fit_err = (float)enabledTools[tool_idx].transform.error;
+
+                cout << "quat: " << q[0] << q[1] << q[2] << q[3] << endl; 
+
+                mypacket_length = MAX_PACKET_LENGTH;
+                result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
+                if( result != 0 ){
+                    printf("Error: unexpected result from packet composition (%d)\n",result);
+                    return -1;
+                }
+
+                // write packet to serial port
+                mySerialPort->write(mypacket,mypacket_length);
+            }
+        }
+    }
+
+    cout << "Stopping tracking" << endl;
+    //onErrorPrintDebugMessage("capi.stopTracking()", capi.stopTracking());
+    if( capi.stopTracking() < 0 ){
+        cout << "Error stopping tracking" << endl;
+        return -1;
+    }
 
 
     // close serial port

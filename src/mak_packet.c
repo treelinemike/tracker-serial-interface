@@ -82,58 +82,58 @@ int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t fram
     uint8_t CRC = 0x00;
 
     // add DLE, STX
-    printf("Adding DLE, STX\n");
+    //printf("Adding DLE, STX\n");
     *temp_packet = DLE;
     *(temp_packet + 1) = STX;
     if((result = add_bytes_to_packet(temp_packet, 2, packet, packet_length, max_packet_length, &CRC, false, false)) != 0)
         return result;
-    printf("Done. CRC = 0x%02X\n",CRC);
+    //printf("Done. CRC = 0x%02X\n",CRC);
 
     // add packet type
-    printf("Adding packet type\n");
+    //printf("Adding packet type\n");
     *temp_packet = PKT_TYPE_TRANSFORM_DATA;
     if((result = add_bytes_to_packet(temp_packet, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
         return result;
-    printf("Done. CRC = 0x%02X\n",CRC);
+    //printf("Done. CRC = 0x%02X\n",CRC);
 
     // add frame number
-    printf("Adding frame number\n");
+    //printf("Adding frame number\n");
     if((result = add_bytes_to_packet((uint8_t*)(&frame_num), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
         return result;
-    printf("Done. CRC = 0x%02X\n",CRC);
+    //printf("Done. CRC = 0x%02X\n",CRC);
 
     // add tool number
-    printf("Adding tool number\n");
+    //printf("Adding tool number\n");
     if((result = add_bytes_to_packet(&tool_num, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
         return result;
-    printf("Done. CRC = 0x%02X\n",CRC);
+    //printf("Done. CRC = 0x%02X\n",CRC);
 
     // add four float32 quaternion components
-    printf("Adding quaternion\n");
+    //printf("Adding quaternion\n");
     for(unsigned int qidx = 0; qidx < q_size; qidx++){
         
         // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each quaternion component
         if((result = add_bytes_to_packet((uint8_t*)(q+qidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
             return result;
         //printf("q[%d] = %8.4f\n",qidx,*(q+qidx));
-        printf("Added quaternion component. CRC = 0x%02X\n",CRC);
+        //printf("Added quaternion component. CRC = 0x%02X\n",CRC);
     } 
 
     // add three float32 translation components
-    printf("Adding translation\n");
+    //printf("Adding translation\n");
     for(unsigned int tidx = 0; tidx < t_size; tidx++){
         // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each translation component
         if((result = add_bytes_to_packet((uint8_t*)(t+tidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
             return result;
         //printf("t[%d] = %8.4f\n",tidx,*(t+tidx));
-        printf("Added translation component. CRC = 0x%02X\n",CRC);
+        //printf("Added translation component. CRC = 0x%02X\n",CRC);
     } 
 
     // add error as reported by tracker
-    printf("Adding tracking error\n");
+    //printf("Adding tracking error\n");
     if((result = add_bytes_to_packet((uint8_t*)(&trk_fit_error), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
         return result;
-    printf("Done. CRC = 0x%02X\n",CRC);
+    //printf("Done. CRC = 0x%02X\n",CRC);
 
     // add CRC
     if((result = add_bytes_to_packet(&CRC, 1, packet, packet_length, max_packet_length, &CRC, false, true)) != 0)
