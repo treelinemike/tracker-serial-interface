@@ -1,24 +1,19 @@
 #include "serial/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
-#include <CombinedApi.h>
 #include <iostream>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string>
 
-#define AURORA_PORT_DESC "NDI Aurora"
-#define STATIC_PORT_DESC "Prolific Technology"
-
-#define REQUIRE_AURORA false
-#define REQUIRE_CLIENT false
-
+#define SERVER_PORT_DESC "Prolific Technology"
+#define REQUIRE_SERVER false
 #define USE_STATIC_PORTS true
 #define STATIC_PORT_SERVER "/dev/ttyUSB2"
 
+#define BAUDRATE 115200U
+
 using namespace std;
 using namespace serial;
-
-
 
 int main(void){
 
@@ -46,39 +41,9 @@ int main(void){
         printf("Error: not a litle endian system\n");
         return -1;
     }
-    //printf("0x%02X%02X%02X%02X\n", *p_fval, *(p_fval+1), *(p_fval+2), *(p_fval+3));
 
 
-    // build a sample packet
-    uint8_t mypacket[MAX_PACKET_LENGTH] = {0x00};
-    size_t mypacket_length = MAX_PACKET_LENGTH;
-
-    uint32_t frame_num = 4011;
-    uint8_t tool_num = 2;
-    float q[SIZE_Q] = {1.2,2.3,3.4,4.5};
-    //float q[SIZE_Q] = {1.2,2.3,3.4,4.501953}; // force a DLE stuff in q[3]
-    float t[SIZE_T] = {5.6,6.7,7.8};
-    float trk_fit_err = 0.2537;
-
-    int result = 0;
-    result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
-    if( result != 0 ){
-        printf("Error: unexpected result from packet composition (%d)\n",result);
-        return -1;
-    }
-
-
-    // display packet
-    uint8_t* p_byte = mypacket;
-    printf("Packet (len = %ld): ",mypacket_length); 
-    while( p_byte < (mypacket + mypacket_length) ){
-        printf("0x%02X ",*p_byte);
-        ++p_byte;
-    }
-    printf("\n");
-
-
-    // list serial ports 
+    // locate serial port 
     std::string server_port_string = "";
 
     if(USE_STATIC_PORTS){
@@ -118,11 +83,11 @@ int main(void){
         }
     }
 
-    // open client serial port (not the tracker)
+    // open serial connection to server (server in turn is connected to the tracker)
     cout << "Attempting to open " << server_port_string; 
     Serial* mySerialPort = NULL;
     try {
-        mySerialPort = new Serial(server_port_string, 115200U, Timeout(50,200,3,200,3), eightbits, parity_none, stopbits_one, flowcontrol_none);
+        mySerialPort = new Serial(server_port_string, BAUDRATE, Timeout(1,1000,0,0,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
     } catch(IOException const& e){
         cout << e.what() << endl;
         return -1;
@@ -132,10 +97,28 @@ int main(void){
 
 
 
-    // close serial port
-    cout << "Closing serial port" << endl;
-    mySerialPort->close();
+    cout << "Waiting to read bytes" << endl;
+    uint8_t bytebuffer[5000];
+    size_t bytes_read = 0;
 
-    // done	
+
+    Timeout to = mySerialPort->getTimeout();
+    cout << "Timeout(" << to.inter_byte_timeout << "," << to.read_timeout_constant << "," << to.read_timeout_multiplier << "," << to.write_timeout_constant << "," << to.write_timeout_multiplier << ")" <<  endl;
+
+    while(1){
+        while((int)bytes_read == 0){
+            bytes_read = mySerialPort->read(bytebuffer,5000);
+        }
+        printf("Read %ld bytes: ", bytes_read);
+        for(int i = 0; i<((int)bytes_read); i++){
+            printf("0x%02X ",bytebuffer[i]);
+        }
+        printf("\n\n");
+        bytes_read = 0;
+    }
+
+
+
+    // done
     return 0;
 }

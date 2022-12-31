@@ -13,9 +13,10 @@
 #define REQUIRE_CLIENT false
 
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT "/dev/ttyUSB0"
-#define STATIC_PORT_AURORA "/dev/ttyUSB1"
+#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
+#define STATIC_PORT_AURORA "/dev/ttyUSB0"
 
+#define BAUDRATE 115200U
 
 using namespace std;
 using namespace serial;
@@ -191,10 +192,10 @@ int main(void){
     }
 
     // open client serial port (not the tracker)
-    cout << "Attempting to open /dev/ttyUSB0...";
+    cout << "Attempting to open connection to client on " << endl;
     Serial* mySerialPort = NULL;
     try {
-        mySerialPort = new Serial(client_port_string, 115200U, Timeout(50,200,3,200,3), eightbits, parity_none, stopbits_one, flowcontrol_none);
+        mySerialPort = new Serial(client_port_string, BAUDRATE, Timeout(Timeout::max(),4,0,4,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
     } catch(IOException const& e){
         cout << e.what() << endl;
         return -1;
@@ -243,12 +244,12 @@ int main(void){
         return -1;
     }
 
-    sleep(1);
 
+    uint32_t prev_frame_num = 0;
     for(int cap_num = 0; cap_num < 20; cap_num++){
         // get a set of transforms
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
-        cout << "Size of new tool data vector: " << newToolData.size() << endl;
+        //cout << "Size of new tool data vector: " << newToolData.size() << endl;
 
         // copy tool transform data into enabledTools vector
         // double loop structure from NDI sample program
@@ -258,13 +259,16 @@ int main(void){
                 if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
                     newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
                     enabledTools[tool_idx] = newToolData[data_idx];
-                    cout << "Captured frame number: " << newToolData[data_idx].frameNumber << endl;               
-                    if( enabledTools[tool_idx].transform.isMissing() ){
-                        cout << "***** MISSING *****" << endl;
-                    } else {
-                        cout << "Transform status: " << newToolData[data_idx].transform.status << endl;
-                        cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
-                    }
+                    /*
+                     *
+                     cout << "Captured frame number: " << newToolData[data_idx].frameNumber << endl;               
+                     if( enabledTools[tool_idx].transform.isMissing() ){
+                     cout << "***** MISSING *****" << endl;
+                     } else {
+                     cout << "Transform status: " << newToolData[data_idx].transform.status << endl;
+                     cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
+                     }
+                     */
                 }
             }
         } 
@@ -272,33 +276,39 @@ int main(void){
         // construct and send a packet for each tool
         for(int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
 
-            cout << " Tool " << tool_idx << "[" << enabledTools[tool_idx].toolInfo << "]: ";
+            // get new frame number
+            frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
+
+            //cout << " Tool " << tool_idx << "[" << enabledTools[tool_idx].toolInfo << "]: ";
             if( enabledTools[tool_idx].transform.isMissing() ){
-                cout << "MISSING" << endl;
+                cout << "missing" << endl;
+            } else if( frame_num == prev_frame_num ){
+                cout << "repeat" << endl;
             } else {
+                cout << "new(" << tool_idx << "/" << frame_num << ")" << endl;
+                
+                   tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
+                   q[0] = (float)enabledTools[tool_idx].transform.q0;
+                   q[1] = (float)enabledTools[tool_idx].transform.qx;
+                   q[2] = (float)enabledTools[tool_idx].transform.qy;
+                   q[3] = (float)enabledTools[tool_idx].transform.qz;
+                   t[0] = (float)enabledTools[tool_idx].transform.tx;
+                   t[1] = (float)enabledTools[tool_idx].transform.ty;
+                   t[2] = (float)enabledTools[tool_idx].transform.tz;
+                   trk_fit_err = (float)enabledTools[tool_idx].transform.error;
 
-                frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
-                tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
-                q[0] = (float)enabledTools[tool_idx].transform.q0;
-                q[1] = (float)enabledTools[tool_idx].transform.qx;
-                q[2] = (float)enabledTools[tool_idx].transform.qy;
-                q[3] = (float)enabledTools[tool_idx].transform.qz;
-                t[0] = (float)enabledTools[tool_idx].transform.tx;
-                t[1] = (float)enabledTools[tool_idx].transform.ty;
-                t[2] = (float)enabledTools[tool_idx].transform.tz;
-                trk_fit_err = (float)enabledTools[tool_idx].transform.error;
-
-                cout << "quat: " << q[0] << q[1] << q[2] << q[3] << endl; 
+                //cout << "quat: " << q[0] << q[1] << q[2] << q[3] << endl; 
 
                 mypacket_length = MAX_PACKET_LENGTH;
                 result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
                 if( result != 0 ){
-                    printf("Error: unexpected result from packet composition (%d)\n",result);
-                    return -1;
+                printf("Error: unexpected result from packet composition (%d)\n",result);
+                return -1;
                 }
 
                 // write packet to serial port
                 mySerialPort->write(mypacket,mypacket_length);
+                
             }
         }
     }
