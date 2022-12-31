@@ -87,7 +87,7 @@ int main(void){
     cout << "Attempting to open " << server_port_string; 
     Serial* mySerialPort = NULL;
     try {
-        mySerialPort = new Serial(server_port_string, BAUDRATE, Timeout(1,1000,0,0,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
+        mySerialPort = new Serial(server_port_string, BAUDRATE, Timeout(1,25,0,0,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
     } catch(IOException const& e){
         cout << e.what() << endl;
         return -1;
