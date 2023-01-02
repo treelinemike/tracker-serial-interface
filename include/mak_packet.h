@@ -17,17 +17,18 @@
 #include <math.h>
 
 // application definitions
-#define PKT_TYPE_TRANSFORM_DATA 0x01
-#define PKT_TYPE_ACK            0x06
-#define PKT_TYPE_TRK_START      0x11
-#define PKT_TYPE_TRK_STOP       0x12
-#define PKT_TYPE_NAK			0x15
-#define DLE 					0x10
-#define STX						0x02
-#define ETX						0x03
-#define SIZE_Q                  4
-#define SIZE_T                  3
-#define MAX_PACKET_LENGTH       255
+#define PKT_TYPE_TRANSFORM_DATA   0x01
+#define PKT_LENGTH_TRANSFORM_DATA 43
+#define PKT_TYPE_ACK              0x06
+#define PKT_TYPE_TRK_START        0x11
+#define PKT_TYPE_TRK_STOP         0x12
+#define PKT_TYPE_NAK			  0x15
+#define DLE 					  0x10
+#define STX						  0x02
+#define ETX						  0x03
+#define SIZE_Q                    4
+#define SIZE_T                    3
+#define MAX_PACKET_LENGTH         255
 
 
 /* * * * * Function Prototypes * * * * */
