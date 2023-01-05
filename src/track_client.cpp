@@ -34,12 +34,16 @@ int main(void){
     uint8_t CRC_received, CRC_computed;
     uint8_t packet_type;
 
-    // ensure that we're on a linux system
-    // TODO: handle Windows, darwin, etc.
-    if(!__linux__){
-        printf("Error: not running on a linux system\n");
+    // ensure that we're on a linux or darwin (apple) system
+    // TODO: handle Windows, etc.
+#ifdef __linux__{
+        printf("Running on linux\n");
+#elif __APPLE__
+        printf("Running on darwin\n");
+#else
+        printf("Not running on linux or darwin, exiting.\n");
         return -1;
-    }
+#endif
 
     // ensure width of float type is four bytes
     // TODO: handle other cases
