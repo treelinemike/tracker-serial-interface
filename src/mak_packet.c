@@ -73,10 +73,10 @@ int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t fram
     int result;
 
     // grab max packet length from input before resetting
-    size_t max_packet_length = *packet_length;
+    size_t max_packet_length = MAX_PACKET_LENGTH;
     *packet_length = 0;
 
-    uint8_t temp_packet[max_packet_length] = {0x00};
+    uint8_t temp_packet[MAX_PACKET_LENGTH] = {0x00};
 
     // initialize CRC8 (polynomial = 0x07, initial value = 0x00, final xor = 0x00, unreflected)
     uint8_t CRC = 0x00;
