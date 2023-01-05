@@ -5,7 +5,7 @@ LIB = /usr/local/lib
 CC = g++
 CFLAGS = -no-pie -pthread -Wall
 LDFLAGS_SERVER = -lserial -lrt -lpthread -lndicapi
-LDFLAGS_CLIENT = -lserial -lrt -lpthread
+LDFLAGS_CLIENT = -lserial -lpthread
 
 INC_PARAMS = $(addprefix -I,$(INCLUDE))
 LIB_PARAMS = $(addprefix -L,$(LIB))
