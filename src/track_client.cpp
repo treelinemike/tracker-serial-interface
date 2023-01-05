@@ -8,7 +8,8 @@
 #define SERVER_PORT_DESC "Prolific Technology"
 #define REQUIRE_SERVER false
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_SERVER "/dev/ttyUSB2"
+//#define STATIC_PORT_SERVER "/dev/ttyUSB2"
+#define STATIC_PORT_SERVER "/dev/cu.usbserial-FTCE3Z7K"
 
 #define BAUDRATE 115200U
 
