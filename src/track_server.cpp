@@ -246,7 +246,7 @@ int main(void){
 
 
     uint32_t prev_frame_num = 0;
-    for(int cap_num = 0; cap_num < 20; cap_num++){
+    for(int cap_num = 0; cap_num < 2000; cap_num++){
         // get a set of transforms
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
         //cout << "Size of new tool data vector: " << newToolData.size() << endl;
