@@ -1,6 +1,7 @@
 #include "serial/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
 #include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string>
@@ -9,7 +10,7 @@
 #define REQUIRE_SERVER false
 #define USE_STATIC_PORTS true
 //#define STATIC_PORT_SERVER "/dev/ttyUSB2"
-#define STATIC_PORT_SERVER "/dev/cu.usbserial-FTCE3Z7K"
+#define STATIC_PORT_SERVER "/dev/cu.usbserial-FTD31G87"
 
 #define BAUDRATE 115200U
 
@@ -34,6 +35,9 @@ int main(void){
     uint8_t *p_packet_end = packet_buffer + PACKET_BUFFER_LENGTH;
     uint8_t CRC_received, CRC_computed;
     uint8_t packet_type;
+
+    ofstream outfile;
+    outfile.open("output.csv");
 
     // ensure that we're on a linux or darwin (apple) system
     // TODO: handle Windows, etc.
@@ -335,7 +339,8 @@ int main(void){
                     memcpy(&tz,packet_buffer+32,4);
                     
                     printf("Frame %5d; q = (%+07.4f, %+07.4f, %+07.4f, %+07.4f); t = (%+8.2f, %+8.2f, %+8.2f)\n",frame_num, q0, q1, q2, q3, tx, ty, tz);
-
+                    
+                    outfile << tx << "," << ty << "," << tz << endl;
 
                     break;
 
