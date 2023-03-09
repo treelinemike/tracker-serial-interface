@@ -2,6 +2,7 @@
 #include "mak_packet.h"
 #include <CombinedApi.h>
 #include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string>
@@ -13,10 +14,13 @@
 #define REQUIRE_CLIENT false
 
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
+#define STATIC_PORT_CLIENT ""
+//#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
 #define STATIC_PORT_AURORA "/dev/ttyUSB0"
 
 #define BAUDRATE 115200U
+
+#define WAIT_FOR_KEYPRESS false
 
 using namespace std;
 using namespace serial;
@@ -80,6 +84,10 @@ void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
 
 int main(void){
 
+
+    // initialize output file
+    ofstream outfile;
+    outfile.open("output.csv");
 
     // ensure that we're on a linux system
     // TODO: handle Windows, darwin, etc.
@@ -192,8 +200,9 @@ int main(void){
     }
 
     // open client serial port (not the tracker)
-    cout << "Attempting to open connection to client on " << endl;
     Serial* mySerialPort = NULL;
+    if(!client_port_string.empty()){
+    cout << "Attempting to open connection to client on " << client_port_string << endl;
     try {
         mySerialPort = new Serial(client_port_string, BAUDRATE, Timeout(Timeout::max(),4,0,4,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
     } catch(IOException const& e){
@@ -202,7 +211,7 @@ int main(void){
     };
     mySerialPort->flush();
     cout << "done." << endl;
-
+    }
 
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
@@ -247,6 +256,13 @@ int main(void){
 
     uint32_t prev_frame_num = 0;
     for(int cap_num = 0; cap_num < 2000; cap_num++){
+        
+        if(WAIT_FOR_KEYPRESS){
+            cout << "Press Enter to capture a transform..." << endl;
+            std::cin.get();
+        }
+        
+        
         // get a set of transforms
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
         //cout << "Size of new tool data vector: " << newToolData.size() << endl;
@@ -307,8 +323,16 @@ int main(void){
                 }
 
                 // write packet to serial port
-                mySerialPort->write(mypacket,mypacket_length);
-                
+                if(!client_port_string.empty()){
+                    mySerialPort->write(mypacket,mypacket_length);
+                }
+
+               // write line to file
+               outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
+               outfile << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ",";
+               outfile << t[0] << "," << t[1] << "," << t[2] << ",";
+               outfile << t[0] << "," << t[1] << "," << t[2] << ",";
+               outfile << trk_fit_err << endl;   
             }
         }
     }
@@ -320,10 +344,15 @@ int main(void){
         return -1;
     }
 
+    // close output file
+    outfile.close();
+
 
     // close serial port
-    cout << "Closing serial port" << endl;
-    mySerialPort->close();
+    if(!client_port_string.empty()){            
+        cout << "Closing serial port" << endl;
+        mySerialPort->close();
+    }
 
     // done	
     return 0;
