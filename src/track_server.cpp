@@ -255,7 +255,7 @@ int main(void){
 
 
     uint32_t prev_frame_num = 0;
-    for(int cap_num = 0; cap_num < 2000; cap_num++){
+    for(int cap_num = 0; cap_num < 30000; cap_num++){
         
         if(WAIT_FOR_KEYPRESS){
             cout << "Press Enter to capture a transform..." << endl;
@@ -301,7 +301,7 @@ int main(void){
             } else if( frame_num == prev_frame_num ){
                 cout << "repeat" << endl;
             } else {
-                cout << "new(" << tool_idx << "/" << frame_num << ")" << endl;
+                cout << (cap_num+1) << ": new(" << tool_idx << "/" << frame_num << ")" << endl;
                 
                    tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
                    q[0] = (float)enabledTools[tool_idx].transform.q0;
