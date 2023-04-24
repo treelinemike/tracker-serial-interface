@@ -15,7 +15,7 @@
 
 #define USE_STATIC_PORTS true
 #define STATIC_PORT_CLIENT ""
-//#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
+#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
 #define STATIC_PORT_AURORA "/dev/ttyUSB0"
 
 #define BAUDRATE 115200U
