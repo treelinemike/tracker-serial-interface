@@ -316,7 +316,7 @@ int main(void){
                 //cout << "quat: " << q[0] << q[1] << q[2] << q[3] << endl; 
 
                 mypacket_length = MAX_PACKET_LENGTH;
-                result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
+                result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_idx, q, SIZE_Q, t, SIZE_T, trk_fit_err);
                 if( result != 0 ){
                 printf("Error: unexpected result from packet composition (%d)\n",result);
                 return -1;
