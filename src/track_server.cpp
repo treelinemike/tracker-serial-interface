@@ -1,5 +1,6 @@
 #include "serial/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
+#include "cxxopts/cxxopts.hpp" // https://www.github.com/jarro2783/cxxopts
 #include <CombinedApi.h>
 #include <iostream>
 #include <fstream>
@@ -14,7 +15,6 @@
 #define REQUIRE_CLIENT false
 
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT ""
 #define STATIC_PORT_CLIENT "/dev/ttyUSB1"
 #define STATIC_PORT_AURORA "/dev/ttyUSB0"
 
@@ -26,8 +26,8 @@ using namespace std;
 using namespace serial;
 
 static CombinedApi capi = CombinedApi();
-static bool apiSupportsBX2 = false;
-static bool apiSupportsStreaming = false;
+//static bool apiSupportsBX2 = false;
+//static bool apiSupportsStreaming = false;
 
 // function from NDI to show error codes on failureS
 void onErrorPrintDebugMessage(std::string methodName, int errorCode)
@@ -58,7 +58,7 @@ void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
     // Initialize and enable tools
     std::vector<PortHandleInfo> portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::NotInit);
     cout << "Number of port handles found: " << portHandles.size() << endl;
-    for (int i = 0; i < portHandles.size(); i++)
+    for (long unsigned int i = 0; i < portHandles.size(); i++)
     {
         onErrorPrintDebugMessage("capi.portHandleInitialize()", capi.portHandleInitialize(portHandles[i].getPortHandle()));
         onErrorPrintDebugMessage("capi.portHandleEnable()", capi.portHandleEnable(portHandles[i].getPortHandle()));
@@ -66,13 +66,13 @@ void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
 
     // Print all enabled tools
     portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::Enabled);
-    for (int i = 0; i < portHandles.size(); i++)
+    for (long unsigned int i = 0; i < portHandles.size(); i++)
     {
         std::cout << portHandles[i].toString() << std::endl;
     }
 
     // Lookup and store the serial number for each enabled tool
-    for (int i = 0; i < portHandles.size(); i++)
+    for (long unsigned int i = 0; i < portHandles.size(); i++)
     {
         enabledTools.push_back(ToolData());
         enabledTools.back().transform.toolHandle = (uint16_t)capi.stringToInt(portHandles[i].getPortHandle());
@@ -84,6 +84,9 @@ void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
 
 int main(void){
 
+
+    // parse command line options
+    cxxopts::Options options("track_server","Simple serial interface to NDI Aurora");
 
     // initialize output file
     ofstream outfile;
@@ -270,8 +273,8 @@ int main(void){
         // copy tool transform data into enabledTools vector
         // double loop structure from NDI sample program
         // likely b/c tool data may come in in a different order than the enabledTools vector?
-        for(int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
-            for(int data_idx = 0; data_idx < newToolData.size(); data_idx++){
+        for(long unsigned int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
+            for(long unsigned int data_idx = 0; data_idx < newToolData.size(); data_idx++){
                 if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
                     newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
                     enabledTools[tool_idx] = newToolData[data_idx];
@@ -290,7 +293,7 @@ int main(void){
         } 
 
         // construct and send a packet for each tool
-        for(int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
+        for(long unsigned int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
 
             // get new frame number
             frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
