@@ -84,6 +84,7 @@ int main(int argc, char** argv){
 
 
     // parse command line options
+    // the add_options() syntax is a little strange, see: https://stackoverflow.com/questions/50844804
     bool wait_for_keypress = false;
     cxxopts::Options options("track_server","Simple serial interface to NDI Aurora");
     options.add_options()
