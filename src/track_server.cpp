@@ -20,8 +20,6 @@
 
 #define BAUDRATE 115200U
 
-#define WAIT_FOR_KEYPRESS false
-
 using namespace std;
 using namespace serial;
 
@@ -82,15 +80,35 @@ void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
 
 
 
-int main(void){
+int main(int argc, char** argv){
 
 
     // parse command line options
+    bool wait_for_keypress = false;
     cxxopts::Options options("track_server","Simple serial interface to NDI Aurora");
+    options.add_options()
+        ("m,manual", "Do not stream, instead prompt to press enter between captures")
+        ("l,listen", "Do not stream, instead wait for a serial request")
+        ("o,output", "Filename for output",cxxopts::value<std::string>());
+    options.parse_positional({"output"});
+    auto cxxopts_result = options.parse(argc,argv);
+
+    if(cxxopts_result.count("manual")){
+        cout << "Manual acquisition mode!" << endl;
+        wait_for_keypress = true;
+    } else if(cxxopts_result.count("listen")){
+        cout << "Listen acquisition mode!" << endl;
+    }
 
     // initialize output file
     ofstream outfile;
-    outfile.open("output.csv");
+    if(cxxopts_result.count("output")){
+        cout << "Writing output to: " << cxxopts_result["output"].as<std::string>() << endl;
+        outfile.open(cxxopts_result["output"].as<std::string>());
+    } else {
+        cout << "Writing output to: output.csv" << endl;
+        outfile.open("output.csv");
+    }
 
     // ensure that we're on a linux system
     // TODO: handle Windows, darwin, etc.
@@ -137,6 +155,7 @@ int main(void){
     }
 
 
+    /*
     // display packet
     uint8_t* p_byte = mypacket;
     printf("Packet (len = %ld): ",mypacket_length); 
@@ -145,7 +164,7 @@ int main(void){
         ++p_byte;
     }
     printf("\n");
-
+    */
 
     // list serial ports 
     std::string aurora_port_string = "";
@@ -260,7 +279,7 @@ int main(void){
     uint32_t prev_frame_num = 0;
     for(int cap_num = 0; cap_num < 30000; cap_num++){
         
-        if(WAIT_FOR_KEYPRESS){
+        if(wait_for_keypress){
             cout << "Press Enter to capture a transform..." << endl;
             std::cin.get();
         }
