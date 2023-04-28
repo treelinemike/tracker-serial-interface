@@ -277,7 +277,11 @@ int main(int argc, char** argv){
 
 
     uint32_t prev_frame_num = 0;
-    for(int cap_num = 0; cap_num < 30000; cap_num++){
+    long unsigned int cap_num = 0;
+    //for(long unsigned int cap_num = 0; cap_num < 30000; cap_num++){
+    while(1){ // TODO: Exit more cleanly
+        
+        ++cap_num;    
         
         if(wait_for_keypress){
             cout << "Press Enter to capture a transform..." << endl;
