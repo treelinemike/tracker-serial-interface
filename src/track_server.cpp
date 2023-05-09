@@ -44,7 +44,8 @@ std::string getToolInfo(std::string toolHandle)
 
     // Return the ID and SerialNumber the desired string format
     std::string outputString = info.getToolId();
-    outputString.append(" s/n:").append(info.getSerialNumber());
+    //outputString.append(" s/n:").append(info.getSerialNumber());
+    outputString.append(info.getSerialNumber());
     return outputString;
 }
 
@@ -302,6 +303,9 @@ int main(int argc, char** argv){
                 if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
                     newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
                     enabledTools[tool_idx] = newToolData[data_idx];
+                    
+                     //cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
+                    
                     /*
                      *
                      cout << "Captured frame number: " << newToolData[data_idx].frameNumber << endl;               
@@ -322,7 +326,7 @@ int main(int argc, char** argv){
             // get new frame number
             frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
 
-            //cout << " Tool " << tool_idx << "[" << enabledTools[tool_idx].toolInfo << "]: ";
+            cout << " Tool " << tool_idx << " [" << enabledTools[tool_idx].toolInfo << "]: ";
             if( enabledTools[tool_idx].transform.isMissing() ){
                 cout << "missing" << endl;
             } else if( frame_num == prev_frame_num ){
