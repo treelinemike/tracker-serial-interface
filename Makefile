@@ -29,10 +29,10 @@ track_server.o : ./src/track_server.cpp
 track_client.o : ./src/track_client.cpp
 	$(CC) $(CFLAGS) $(INC_SYS_PARAMS) $(INC_PARAMS) -o $@ -c $<
 
-mak_packet.o : ./src/mak_packet.c
+read_test.o : ./src/read_test.cpp
 	$(CC) $(CFLAGS) $(INC_SYS_PARAMS) $(INC_PARAMS) -o $@ -c $<
 
-read_test.o : ./src/read_test.cpp
+mak_packet.o : ./src/mak_packet.cpp
 	$(CC) $(CFLAGS) $(INC_SYS_PARAMS) $(INC_PARAMS) -o $@ -c $<
 
 clean :

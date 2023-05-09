@@ -1,6 +1,6 @@
-/* mak_packet.h
+/* mak_packet.cpp
  *
- * Custom serial packet definitions.
+ * Custom serial packet definitions and associated functions.
  *
  * Updated:  2022-12-27
  * Author: 	 M. Kokko

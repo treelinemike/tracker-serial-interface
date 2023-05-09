@@ -7,51 +7,68 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <cassert>
 
 #define SERVER_PORT_DESC "Prolific Technology"
 #define REQUIRE_SERVER false
 #define USE_STATIC_PORTS true
-//#define STATIC_PORT_SERVER "/dev/ttyUSB2"
-#define STATIC_PORT_SERVER "/dev/cu.usbserial-FTD31G87"
+#define STATIC_PORT_SERVER "/dev/ttyUSB1"
+//#define STATIC_PORT_SERVER "/dev/cu.usbserial-FTD31G87"
 
 #define BAUDRATE 115200U
 
 #define BYTE_BUFFER_LENGTH 2048
 #define PACKET_BUFFER_LENGTH 255
 
+#define assertm(exp, msg) assert(((void)msg, exp))
+
 using namespace std;
 using namespace serial;
 
+// simple class for representing a serial message
 class SimpleMsg {
-    public:
-        void set_msg(uint8_t mtype, size_t msize, uint8_t* mdata);
-        void get_msg(
     private:
         uint8_t msg_type;
         size_t msg_size;
         uint8_t *msg;
-
+    public:
+        void set_msg(uint8_t mtype, size_t msize, uint8_t* mdata){
+            this->msg_type = mtype;
+            this->msg_size = msize;
+            this->msg = (uint8_t*) malloc(msize);
+            memcpy(this->msg, mdata, msize);
+        }
+        uint8_t get_msg_type(){
+            return this->msg_type;
+        }
+        uint8_t* get_msg_buffer(){
+            return this->msg;
+        }
+        size_t get_msg_size(){
+            return this->msg_size;
+        }
 };
 
+// vector to store messages and mutex to lock it
 std::vector<SimpleMsg> msg_buffer;
 std::mutex msg_lock;
 
+// function to read from serial port, to be run in dedicated thread
 void monitor_serial_port(Serial* mySerialPort){
-    
+
     uint8_t byte_buffer[BYTE_BUFFER_LENGTH] = {0};
     size_t bytes_read;
     uint8_t *p_byte_end = byte_buffer + BYTE_BUFFER_LENGTH;
     uint8_t *p_byte, *p_start_search, *p_stop_search, *p_byte_copy;
     uint8_t start_found_flag, end_found_flag, crc_verified_flag;
     uint8_t DLE_count = 0;
-    uint8_t *p_display = byte_buffer;
     uint32_t packet_length;
     uint8_t packet_buffer[PACKET_BUFFER_LENGTH] = {0};
     uint8_t *p_packet = packet_buffer;
     uint8_t *p_packet_end = packet_buffer + PACKET_BUFFER_LENGTH;
     uint8_t CRC_received, CRC_computed;
     uint8_t packet_type;
-    
+
     // start adding to beginning of byte buffer
     p_byte = byte_buffer;
 
@@ -114,7 +131,7 @@ void monitor_serial_port(Serial* mySerialPort){
                ++p_display;
                }
                printf("\n");
-               */
+             */
         }
 
         // try to find DLE ETX
@@ -142,7 +159,7 @@ void monitor_serial_port(Serial* mySerialPort){
                } else {
                printf("No end found\n");
                }
-               */
+             */
         }
 
         // now we have a full message
@@ -189,7 +206,7 @@ void monitor_serial_port(Serial* mySerialPort){
             ++p_display;
             }
             printf("\n");
-            */
+             */
 
             // reset byte buffer
             // i.e. copy everything past message we extracted back to the beginning of the buffer
@@ -210,7 +227,7 @@ void monitor_serial_port(Serial* mySerialPort){
             ++p_display;
             }
             printf("\n");
-            */
+             */
 
         }
 
@@ -246,9 +263,14 @@ void monitor_serial_port(Serial* mySerialPort){
             // get packet type
             packet_type = *(packet_buffer + 2);
 
-            //printf("Received packet of type 0x%02X and length %d\n",packet_type,packet_length);
-            SimpleMsg new_message;
-            new_message.msg_id = packet_type;
+            printf("Received packet of type 0x%02X and length %d\n",packet_type,packet_length);
+ 
+            // create a new message object and put it into vector           
+            SimpleMsg new_msg;
+            new_msg.set_msg(packet_type,packet_length,packet_buffer);
+            msg_lock.lock();
+            msg_buffer.push_back(new_msg);
+            msg_lock.unlock();
 
 
         }
@@ -260,7 +282,8 @@ void monitor_serial_port(Serial* mySerialPort){
 
 int main(void){
 
-
+    uint8_t *packet_buffer = nullptr;
+    
     ofstream outfile;
     outfile.open("output.csv");
 
@@ -268,13 +291,13 @@ int main(void){
 
     // ensure that we're on a linux or darwin (apple) system
     // TODO: handle Windows, etc.
-#ifdef __linux__{
-        printf("Running on linux\n");
+#ifdef __linux__
+    printf("Running on linux\n");
 #elif __APPLE__
-        printf("Running on darwin\n");
+    printf("Running on darwin\n");
 #else
-        printf("Not running on linux or darwin, exiting.\n");
-        return -1;
+    printf("Not running on linux or darwin, exiting.\n");
+    return -1;
 #endif
 
     // ensure width of float type is four bytes
@@ -319,7 +342,7 @@ int main(void){
                 client_port_string = all_ports[i].port;
                 cout << "Found client on " << client_port_string << endl;
                 }
-                */
+                 */
             }
             /*
                if( client_port_string.empty() ) {
@@ -327,7 +350,7 @@ int main(void){
                if(REQUIRE_CLIENT) 
                return -1;
                }
-               */
+             */
 
 
         } else {
@@ -346,16 +369,30 @@ int main(void){
     };
     mySerialPort->flush();
     cout << "done." << endl;
-    
+
     // start reading from the serial port in a separate thread
     std::thread serial_thread (monitor_serial_port,mySerialPort);
-    
+
 
     // process packets
-                switch(packet_type){
+    while(1){
+        if(msg_buffer.size() > 0){
+
+            
+            // get the first element in the vector
+            // do this quickly so the read thread can keep accessing the vector
+            msg_lock.lock();
+            assertm( msg_buffer.size() > 0, "Vector length changed while acquirng lock.." );
+            SimpleMsg this_msg = msg_buffer[0];
+            msg_buffer.erase(msg_buffer.begin());
+            msg_lock.unlock();
+
+            packet_buffer = this_msg.get_msg_buffer();
+
+            switch(this_msg.get_msg_type()){
 
                 case PKT_TYPE_TRANSFORM_DATA:
-                    if(packet_length != PKT_LENGTH_TRANSFORM_DATA){
+                    if(this_msg.get_msg_size() != PKT_LENGTH_TRANSFORM_DATA){
                         printf("Error: incorrect packet length, discarding packet\n");
                         break;
                     }
@@ -372,16 +409,21 @@ int main(void){
                     memcpy(&tx,packet_buffer+24,4);
                     memcpy(&ty,packet_buffer+28,4);
                     memcpy(&tz,packet_buffer+32,4);
-                    
+
                     printf("Frame %5d; q = (%+07.4f, %+07.4f, %+07.4f, %+07.4f); t = (%+8.2f, %+8.2f, %+8.2f)\n",frame_num, q0, q1, q2, q3, tx, ty, tz);
-                    
+
                     outfile << tx << "," << ty << "," << tz << endl;
 
                     break;
 
                 default:
                     printf("Unsupported packet type, discarding packet\n");
-            } 
+            }
+
+
+
+        }
+    }
 
     serial_thread.join(); 
 
