@@ -263,8 +263,8 @@ void monitor_serial_port(Serial* mySerialPort){
             // get packet type
             packet_type = *(packet_buffer + 2);
 
-            printf("Received packet of type 0x%02X and length %d\n",packet_type,packet_length);
- 
+            //printf("Received packet of type 0x%02X and length %d\n",packet_type,packet_length);
+
             // create a new message object and put it into vector           
             SimpleMsg new_msg;
             new_msg.set_msg(packet_type,packet_length,packet_buffer);
@@ -283,7 +283,7 @@ void monitor_serial_port(Serial* mySerialPort){
 int main(void){
 
     uint8_t *packet_buffer = nullptr;
-    
+
     ofstream outfile;
     outfile.open("output.csv");
 
@@ -378,7 +378,7 @@ int main(void){
     while(1){
         if(msg_buffer.size() > 0){
 
-            
+
             // get the first element in the vector
             // do this quickly so the read thread can keep accessing the vector
             msg_lock.lock();
@@ -390,6 +390,30 @@ int main(void){
             packet_buffer = this_msg.get_msg_buffer();
 
             switch(this_msg.get_msg_type()){
+
+                case PKT_TYPE_GET_PROBE_TFORM:
+                    uint16_t data_size;
+                    uint32_t probe_sn;
+
+                    // check for correct data length
+                    if(this_msg.get_msg_size() < 5){
+                        printf("Error: incorrect packet length, discarding packet\n");
+                    }
+                    memcpy(&data_size,packet_buffer+3,2);
+                    if( data_size != 4 ){
+                        printf("Error: incorrect payload data size, discarding packet\n");
+                        break;
+                    }
+
+                    // get probe serial number
+                    if(this_msg.get_msg_size() < (long unsigned int)(8+data_size)){
+                        printf("Error: incorrect packet length, discarding packet\n");
+                    }
+                    memcpy(&probe_sn,packet_buffer+5,4);
+                    printf("Requested transform for probe s/n: 0x%08X\n",probe_sn);
+
+                    break;
+
 
                 case PKT_TYPE_TRANSFORM_DATA:
                     if(this_msg.get_msg_size() != PKT_LENGTH_TRANSFORM_DATA){

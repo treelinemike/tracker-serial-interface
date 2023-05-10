@@ -22,6 +22,7 @@
 #define PKT_TYPE_ACK              0x06
 #define PKT_TYPE_TRK_START        0x11
 #define PKT_TYPE_TRK_STOP         0x12
+#define PKT_TYPE_GET_PROBE_TFORM  0x13
 #define PKT_TYPE_NAK			  0x15
 #define DLE 					  0x10
 #define STX						  0x02
