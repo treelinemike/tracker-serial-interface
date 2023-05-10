@@ -7,86 +7,87 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string>
+#include <thread>
+#include <mutex>
+#include <cassert>
 
 #define AURORA_PORT_DESC "NDI Aurora"
 #define CLIENT_PORT_DESC "Prolific Technology"
-
 #define REQUIRE_AURORA false
 #define REQUIRE_CLIENT false
-
 #define USE_STATIC_PORTS true
 #define STATIC_PORT_CLIENT "/dev/ttyUSB1"
 #define STATIC_PORT_AURORA "/dev/ttyUSB0"
-
 #define BAUDRATE 115200U
+#define BYTE_BUFFER_LENGTH 2048
+#define PACKET_BUFFER_LENGTH 255
+#define assertm(exp, msg) assert(((void)msg, exp))
 
 using namespace std;
 using namespace serial;
 
+// TODO: refactor into headers, etc.
+// simple class for representing a serial message
+class SimpleMsg {
+    private:
+        uint8_t msg_type;
+        size_t msg_size;
+        uint8_t *msg;
+    public:
+        void set_msg(uint8_t mtype, size_t msize, uint8_t* mdata){
+            this->msg_type = mtype;
+            this->msg_size = msize;
+            this->msg = (uint8_t*) malloc(msize);
+            memcpy(this->msg, mdata, msize);
+        }
+        uint8_t get_msg_type(){
+            return this->msg_type;
+        }
+        uint8_t* get_msg_buffer(){
+            return this->msg;
+        }
+        size_t get_msg_size(){
+            return this->msg_size;
+        }
+};
+
+// globals
+// TODO: rewrite to avoid using globals
+std::vector<SimpleMsg> msg_buffer;
+std::mutex msg_lock;
 static CombinedApi capi = CombinedApi();
 //static bool apiSupportsBX2 = false;
 //static bool apiSupportsStreaming = false;
 
-// function from NDI to show error codes on failureS
-void onErrorPrintDebugMessage(std::string methodName, int errorCode)
-{
-    if (errorCode < 0)
-    {
-        std::cout << methodName << " failed: " << capi.errorToString(errorCode) << std::endl;
-    }
-}
+// function prototypes
+void monitor_serial_port(Serial* mySerialPort);
+void onErrorPrintDebugMessage(std::string methodName, int errorCode);
+std::string getToolInfo(std::string toolHandle);
+void initializeAndEnableTools(std::vector<ToolData>& enabledTools);
 
-// function from NDI to get tool info
-std::string getToolInfo(std::string toolHandle)
-{
-    // Get the port handle info from PHINF
-    PortHandleInfo info = capi.portHandleInfo(toolHandle);
-
-    // Return the ID and SerialNumber the desired string format
-    std::string outputString = info.getToolId();
-    //outputString.append(" s/n:").append(info.getSerialNumber());
-    outputString.append(info.getSerialNumber());
-    return outputString;
-}
-
-// function from NDI to initialize and enable tools
-void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
-{
-    std::cout << std::endl << "Initializing and enabling tools..." << std::endl;
-
-    // Initialize and enable tools
-    std::vector<PortHandleInfo> portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::NotInit);
-    cout << "Number of port handles found: " << portHandles.size() << endl;
-    for (long unsigned int i = 0; i < portHandles.size(); i++)
-    {
-        onErrorPrintDebugMessage("capi.portHandleInitialize()", capi.portHandleInitialize(portHandles[i].getPortHandle()));
-        onErrorPrintDebugMessage("capi.portHandleEnable()", capi.portHandleEnable(portHandles[i].getPortHandle()));
-    }
-
-    // Print all enabled tools
-    portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::Enabled);
-    for (long unsigned int i = 0; i < portHandles.size(); i++)
-    {
-        std::cout << portHandles[i].toString() << std::endl;
-    }
-
-    // Lookup and store the serial number for each enabled tool
-    for (long unsigned int i = 0; i < portHandles.size(); i++)
-    {
-        enabledTools.push_back(ToolData());
-        enabledTools.back().transform.toolHandle = (uint16_t)capi.stringToInt(portHandles[i].getPortHandle());
-        enabledTools.back().toolInfo = getToolInfo(portHandles[i].getPortHandle());
-    }
-}
-
-
-
+// main
 int main(int argc, char** argv){
 
+
+    uint8_t mypacket[MAX_PACKET_LENGTH] = {0};
+    size_t mypacket_length = MAX_PACKET_LENGTH;
+    uint32_t frame_num, probe_sn;
+    uint8_t tool_num;
+    float q[SIZE_Q] = {0.0F};
+    float t[SIZE_T] = {0.0F};
+    float trk_fit_err;
+    int result;
+    bool capture_requested = false;
+    bool transform_sent = false;
+    char probe_sn_str[12] = {0};
+    uint16_t data_size;
+    uint8_t *packet_buffer;
 
     // parse command line options
     // the add_options() syntax is a little strange, see: https://stackoverflow.com/questions/50844804
     bool wait_for_keypress = false;
+    bool listen_mode = false;
+
     cxxopts::Options options("track_server","Simple serial interface to NDI Aurora");
     options.add_options()
         ("m,manual", "Do not stream, instead prompt to press enter between captures")
@@ -100,6 +101,7 @@ int main(int argc, char** argv){
         wait_for_keypress = true;
     } else if(cxxopts_result.count("listen")){
         cout << "Listen acquisition mode!" << endl;
+        listen_mode = true;
     }
 
     // initialize output file
@@ -135,43 +137,10 @@ int main(int argc, char** argv){
         printf("Error: not a litle endian system\n");
         return -1;
     }
-    //printf("0x%02X%02X%02X%02X\n", *p_fval, *(p_fval+1), *(p_fval+2), *(p_fval+3));
 
-
-    // build a sample packet
-    uint8_t mypacket[MAX_PACKET_LENGTH] = {0x00};
-    size_t mypacket_length = MAX_PACKET_LENGTH;
-
-    uint32_t frame_num = 4011;
-    uint8_t tool_num = 2;
-    float q[SIZE_Q] = {1.2,2.3,3.4,4.5};
-    //float q[SIZE_Q] = {1.2,2.3,3.4,4.501953}; // force a DLE stuff in q[3]
-    float t[SIZE_T] = {5.6,6.7,7.8};
-    float trk_fit_err = 0.2537;
-
-    int result = 0;
-    result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_num, q, SIZE_Q, t, SIZE_T, trk_fit_err);
-    if( result != 0 ){
-        printf("Error: unexpected result from packet composition (%d)\n",result);
-        return -1;
-    }
-
-
-    /*
-    // display packet
-    uint8_t* p_byte = mypacket;
-    printf("Packet (len = %ld): ",mypacket_length); 
-    while( p_byte < (mypacket + mypacket_length) ){
-        printf("0x%02X ",*p_byte);
-        ++p_byte;
-    }
-    printf("\n");
-    */
-
-    // list serial ports 
+    // open aurora and client serial ports, and list them if requested 
     std::string aurora_port_string = "";
     std::string client_port_string = "";
-
     if(USE_STATIC_PORTS){
         aurora_port_string = std::string(STATIC_PORT_AURORA);
         client_port_string = std::string(STATIC_PORT_CLIENT);
@@ -226,16 +195,20 @@ int main(int argc, char** argv){
     // open client serial port (not the tracker)
     Serial* mySerialPort = NULL;
     if(!client_port_string.empty()){
-    cout << "Attempting to open connection to client on " << client_port_string << endl;
-    try {
-        mySerialPort = new Serial(client_port_string, BAUDRATE, Timeout(Timeout::max(),4,0,4,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
-    } catch(IOException const& e){
-        cout << e.what() << endl;
-        return -1;
-    };
-    mySerialPort->flush();
-    cout << "done." << endl;
+        cout << "Attempting to open connection to client on " << client_port_string << endl;
+        try {
+            mySerialPort = new Serial(client_port_string, BAUDRATE, Timeout(Timeout::max(),4,0,4,0), eightbits, parity_none, stopbits_one, flowcontrol_none);
+        } catch(IOException const& e){
+            cout << e.what() << endl;
+            return -1;
+        };
+        mySerialPort->flush();
+        cout << "done." << endl;
     }
+
+    // start thread to read messages from the client
+    printf("Starting thread to read from client serial connection...\n");
+    std::thread serial_thread (monitor_serial_port,mySerialPort);
 
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
@@ -262,7 +235,6 @@ int main(int argc, char** argv){
 
     cout << capi.getTrackingDataTX() << endl;
 
-    // configure user parameters (can we skip?)
 
     // initialize and enable tools
     std::vector<ToolData> enabledTools = std::vector<ToolData>();
@@ -282,16 +254,62 @@ int main(int argc, char** argv){
     long unsigned int cap_num = 0;
     //for(long unsigned int cap_num = 0; cap_num < 30000; cap_num++){
     while(1){ // TODO: Exit more cleanly
-        
+
         ++cap_num;    
-        
+
         if(wait_for_keypress){
             cout << "Press Enter to capture a transform..." << endl;
             std::cin.get();
         }
-        
-        
+        if(listen_mode){
+            capture_requested = false;
+            while(!capture_requested){
+                if(msg_buffer.size() > 0){
+                    msg_lock.lock();
+                    assertm( msg_buffer.size() > 0, "Vector length changed while acquirng lock.." );
+                    SimpleMsg this_msg = msg_buffer[0];
+                    msg_buffer.erase(msg_buffer.begin());
+                    msg_lock.unlock();
+                    packet_buffer = this_msg.get_msg_buffer();
+                    capture_requested = true;
+
+                    if(this_msg.get_msg_type() == PKT_TYPE_GET_PROBE_TFORM){
+
+                        // get data payload size
+                        if(capture_requested && (this_msg.get_msg_size() >= 5)){
+                            memcpy(&data_size,packet_buffer+3,2);
+                        } else {
+                            printf("Error: incorrect packet length, discarding packet\n");
+                            capture_requested = false;
+                        }
+
+                        // make sure data payload size is correct
+                        if( capture_requested && (data_size < 4) ){
+                            printf("Error: incorrect payload data size, discarding packet\n");
+                            capture_requested = false;
+                        }
+
+                        // get probe serial number
+                        if(capture_requested && (this_msg.get_msg_size() >= (long unsigned int)(8+data_size))){
+                            memcpy(&probe_sn,packet_buffer+5,4);
+                            sprintf(probe_sn_str,"NDI%08X",probe_sn);
+                            printf("Requested transform for probe s/n: 0x%08X\n",probe_sn);
+                            //printf("string<%s>\n",probe_sn_str);
+                        } else {
+                            printf("Error: incorrect packet length, discarding packet\n");
+                            capture_requested = false;    
+                        }
+
+                    } else {
+                        printf("Received a non-transform requet packet, discarding\n");
+                    }
+                }
+            }
+        }
+
+
         // get a set of transforms
+        transform_sent = false;
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
         //cout << "Size of new tool data vector: " << newToolData.size() << endl;
 
@@ -303,9 +321,9 @@ int main(int argc, char** argv){
                 if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
                     newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
                     enabledTools[tool_idx] = newToolData[data_idx];
-                    
-                     //cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
-                    
+
+                    //cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
+
                     /*
                      *
                      cout << "Captured frame number: " << newToolData[data_idx].frameNumber << endl;               
@@ -333,38 +351,57 @@ int main(int argc, char** argv){
                 cout << "repeat" << endl;
             } else {
                 cout << (cap_num+1) << ": new(" << tool_idx << "/" << frame_num << ")" << endl;
-                
-                   tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
-                   q[0] = (float)enabledTools[tool_idx].transform.q0;
-                   q[1] = (float)enabledTools[tool_idx].transform.qx;
-                   q[2] = (float)enabledTools[tool_idx].transform.qy;
-                   q[3] = (float)enabledTools[tool_idx].transform.qz;
-                   t[0] = (float)enabledTools[tool_idx].transform.tx;
-                   t[1] = (float)enabledTools[tool_idx].transform.ty;
-                   t[2] = (float)enabledTools[tool_idx].transform.tz;
-                   trk_fit_err = (float)enabledTools[tool_idx].transform.error;
+
+                tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
+                q[0] = (float)enabledTools[tool_idx].transform.q0;
+                q[1] = (float)enabledTools[tool_idx].transform.qx;
+                q[2] = (float)enabledTools[tool_idx].transform.qy;
+                q[3] = (float)enabledTools[tool_idx].transform.qz;
+                t[0] = (float)enabledTools[tool_idx].transform.tx;
+                t[1] = (float)enabledTools[tool_idx].transform.ty;
+                t[2] = (float)enabledTools[tool_idx].transform.tz;
+                trk_fit_err = (float)enabledTools[tool_idx].transform.error;
 
                 //cout << "quat: " << q[0] << q[1] << q[2] << q[3] << endl; 
 
                 mypacket_length = MAX_PACKET_LENGTH;
                 result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_idx, q, SIZE_Q, t, SIZE_T, trk_fit_err);
                 if( result != 0 ){
-                printf("Error: unexpected result from packet composition (%d)\n",result);
-                return -1;
+                    printf("Error: unexpected result from packet composition (%d)\n",result);
+                    return -1;
                 }
 
-                // write packet to serial port
+                // write packet to serial port and file
                 if(!client_port_string.empty()){
-                    mySerialPort->write(mypacket,mypacket_length);
+                    if(listen_mode){
+                        if(!strcmp(enabledTools[tool_idx].toolInfo.c_str(),probe_sn_str)){
+                            mySerialPort->write(mypacket,mypacket_length);
+                            transform_sent = true;
+
+                            // write line to file
+                            outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
+                            outfile << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ",";
+                            outfile << t[0] << "," << t[1] << "," << t[2] << ",";
+                            outfile << t[0] << "," << t[1] << "," << t[2] << ",";
+                            outfile << trk_fit_err << endl;   
+                        }
+                    } else {
+                        mySerialPort->write(mypacket,mypacket_length);
+                        // write line to file
+                        outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
+                        outfile << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ",";
+                        outfile << t[0] << "," << t[1] << "," << t[2] << ",";
+                        outfile << t[0] << "," << t[1] << "," << t[2] << ",";
+                        outfile << trk_fit_err << endl;   
+
+                    }
                 }
 
-               // write line to file
-               outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
-               outfile << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ",";
-               outfile << t[0] << "," << t[1] << "," << t[2] << ",";
-               outfile << t[0] << "," << t[1] << "," << t[2] << ",";
-               outfile << trk_fit_err << endl;   
             }
+        }
+        if(listen_mode && !transform_sent){
+            // TODO SEND NAK PACKET
+            printf("Error could not send requested transform!\n");
         }
     }
 
@@ -388,3 +425,281 @@ int main(int argc, char** argv){
     // done	
     return 0;
 }
+
+// function from NDI to show error codes on failureS
+void onErrorPrintDebugMessage(std::string methodName, int errorCode)
+{
+    if (errorCode < 0)
+    {
+        std::cout << methodName << " failed: " << capi.errorToString(errorCode) << std::endl;
+    }
+}
+
+// function from NDI to get tool info
+std::string getToolInfo(std::string toolHandle)
+{
+    // Get the port handle info from PHINF
+    PortHandleInfo info = capi.portHandleInfo(toolHandle);
+
+    // Return the ID and SerialNumber the desired string format
+    std::string outputString = info.getToolId();
+    //outputString.append(" s/n:").append(info.getSerialNumber());
+    outputString.append(info.getSerialNumber());
+    return outputString;
+}
+
+// function from NDI to initialize and enable tools
+void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
+{
+    std::cout << std::endl << "Initializing and enabling tools..." << std::endl;
+
+    // Initialize and enable tools
+    std::vector<PortHandleInfo> portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::NotInit);
+    cout << "Number of port handles found: " << portHandles.size() << endl;
+    for (long unsigned int i = 0; i < portHandles.size(); i++)
+    {
+        onErrorPrintDebugMessage("capi.portHandleInitialize()", capi.portHandleInitialize(portHandles[i].getPortHandle()));
+        onErrorPrintDebugMessage("capi.portHandleEnable()", capi.portHandleEnable(portHandles[i].getPortHandle()));
+    }
+
+    // Print all enabled tools
+    portHandles = capi.portHandleSearchRequest(PortHandleSearchRequestOption::Enabled);
+    for (long unsigned int i = 0; i < portHandles.size(); i++)
+    {
+        std::cout << portHandles[i].toString() << std::endl;
+    }
+
+    // Lookup and store the serial number for each enabled tool
+    for (long unsigned int i = 0; i < portHandles.size(); i++)
+    {
+        enabledTools.push_back(ToolData());
+        enabledTools.back().transform.toolHandle = (uint16_t)capi.stringToInt(portHandles[i].getPortHandle());
+        enabledTools.back().toolInfo = getToolInfo(portHandles[i].getPortHandle());
+    }
+}
+
+// function to read from serial port, to be run in dedicated thread
+void monitor_serial_port(Serial* mySerialPort){
+
+    uint8_t byte_buffer[BYTE_BUFFER_LENGTH] = {0};
+    size_t bytes_read;
+    uint8_t *p_byte_end = byte_buffer + BYTE_BUFFER_LENGTH;
+    uint8_t *p_byte, *p_start_search, *p_stop_search, *p_byte_copy;
+    uint8_t start_found_flag, end_found_flag, crc_verified_flag;
+    uint8_t DLE_count = 0;
+    uint32_t packet_length;
+    uint8_t packet_buffer[PACKET_BUFFER_LENGTH] = {0};
+    uint8_t *p_packet = packet_buffer;
+    uint8_t *p_packet_end = packet_buffer + PACKET_BUFFER_LENGTH;
+    uint8_t CRC_received, CRC_computed;
+    uint8_t packet_type;
+
+    // start adding to beginning of byte buffer
+    p_byte = byte_buffer;
+
+    // loop forever, capturing bytes from serial stream and
+    // processing packets when they are identified
+    printf("Parsing data from serial port...\n");
+    while(1){
+
+        // reset all parsing variables
+        p_start_search = byte_buffer;
+        DLE_count = 0;
+        start_found_flag = 0;
+        end_found_flag = 0;
+        packet_length = 0;
+        crc_verified_flag = 0;
+
+        // read all available bytes from serial port
+        // TODO: this will need to be updated for implementation on a microcontroller
+        bytes_read = mySerialPort->read(p_byte,p_byte_end-p_byte);
+        p_byte += bytes_read;
+
+        // try to position p_start_search at DLE byte in DLE STX 
+        while( !start_found_flag && p_start_search < p_byte) {
+            while(*p_start_search == DLE){
+                ++DLE_count;
+                ++p_start_search;
+            }
+            if( (DLE_count % 2 == 1) && *p_start_search == STX ){
+                start_found_flag = 1;
+            } else {
+                ++p_start_search;
+                DLE_count = 0;
+            }
+        }
+
+        // adjust p_byte or p_start_search
+        if( !start_found_flag ){
+            //printf("Start not found!\n");
+            // we didn't find a start, so clear byte buffer
+            // unless last byte is DLE which could be part of a start byte
+            if(p_byte > byte_buffer){
+                if( *(p_byte-1) == DLE ){
+                    *(byte_buffer) = DLE;
+                    p_byte = byte_buffer + 1;
+                } else {
+                    p_byte = byte_buffer;
+                }
+            }
+            //printf("p_byte is %ld bytes ahead of buffer start\n",p_byte-byte_buffer);
+        } else {
+            //printf("Found start\n");
+            //back up pointer to the DLE
+            --p_start_search;
+
+            /* DEBUG  
+               printf("Byte buffer from start of message: ");
+               p_display = p_start_search;
+               while(p_display < p_byte){
+               printf("0x%02X ",*p_display);
+               ++p_display;
+               }
+               printf("\n");
+             */
+        }
+
+        // try to find DLE ETX
+        // in a new block to reduce nesting
+        if(start_found_flag){
+            p_stop_search = p_start_search;
+            DLE_count = 0;
+
+            while( !end_found_flag && (p_stop_search < p_byte)) {
+                while(*p_stop_search == DLE){
+                    ++DLE_count;
+                    ++p_stop_search;
+                }
+                if( (DLE_count % 2 == 1) && (*p_stop_search == ETX) ){
+                    end_found_flag = 1;
+                } else {
+                    ++p_stop_search;
+                    DLE_count = 0;
+                }
+            }
+
+            /* DEBUG
+               if(end_found_flag){
+               printf("Found end\n");
+               } else {
+               printf("No end found\n");
+               }
+             */
+        }
+
+        // now we have a full message
+        // so copy it out to message buffer and reset the byte buffer
+        // while copying to byte buffer un-stuff DLEs
+        if(end_found_flag){
+
+            // increment p_stop_search so it points to one byte past ETX
+            ++p_stop_search;
+
+            // copy each byte out
+            p_packet = packet_buffer;
+            p_byte_copy = p_start_search;
+            while(p_byte_copy < p_stop_search){
+
+                // make sure we have enough room to copy another byte into the packet buffer
+                if(p_packet >= p_packet_end){
+                    printf("Error - insufficient message buffer length\n");
+                    return;
+                }
+
+                // copy this byte in
+                *p_packet = *p_byte_copy;
+                ++packet_length;
+
+                // increment packet buffer pointer
+                ++p_packet;
+
+                // increment byte buffer pointer, un-stuffing DLEs
+                if((*p_byte_copy == DLE) && ((p_byte_copy+1) < p_byte_end) && (*(p_byte_copy+1) == DLE) ){
+                    p_byte_copy = p_byte_copy +2;
+                } else {
+                    ++p_byte_copy;
+                }
+            }
+
+            /* DEBUG
+            // now we have a complete message
+            // display it
+            p_display = packet_buffer;
+            printf("Unstuffed packet: ");
+            while(p_display < (packet_buffer + packet_length)){
+            printf("0x%02X ",*p_display);
+            ++p_display;
+            }
+            printf("\n");
+             */
+
+            // reset byte buffer
+            // i.e. copy everything past message we extracted back to the beginning of the buffer
+            p_byte_copy = byte_buffer;
+            while(p_stop_search < p_byte){
+                *p_byte_copy = *p_stop_search;
+                ++p_byte_copy;
+                ++p_stop_search;
+            }
+            p_byte = p_byte_copy;
+
+            /* DEBUG
+            // now show remaining buffer past the packet we just extracted
+            p_display = byte_buffer;
+            printf("Remaining bytes in byte_buffer: ");
+            while(p_display < p_byte){
+            printf("0x%02X ",*p_display);
+            ++p_display;
+            }
+            printf("\n");
+             */
+
+        }
+
+        // now we have an unstuffed packet
+        // check CRC
+        if(packet_length > 0){
+
+            // ensure packet is at least the minimum length required
+            if(packet_length < 6){
+                printf("Error: packet not long enough to have a CRC and length byte"); // length = 4 would be {DLE,STX,DLE,ETX}
+            return;
+            }
+
+            // extract CRC from packet
+            CRC_received = *(packet_buffer + packet_length -3);
+
+            // compute CRC
+            CRC_computed = 0x00;
+            crcAddBytes(&CRC_computed,packet_buffer+2,packet_length-5); // adjust to omit DLE, STX, ETX, and CRC8 bytes
+
+            // check CRC
+            //printf("CRC8 received: 0x%02X, computed: 0x%02X\n",CRC_received,CRC_computed);
+            if(CRC_received != CRC_computed){
+                printf("Error: CRC8 mismatch, discarding packet\n");
+            } else {
+                crc_verified_flag = 1;
+            }
+        }
+
+        // process the packet we've received
+        if(crc_verified_flag){
+
+            // get packet type
+            packet_type = *(packet_buffer + 2);
+
+            //printf("Received packet of type 0x%02X and length %d\n",packet_type,packet_length);
+
+            // create a new message object and put it into vector           
+            SimpleMsg new_msg;
+            new_msg.set_msg(packet_type,packet_length,packet_buffer);
+            msg_lock.lock();
+            msg_buffer.push_back(new_msg);
+            msg_lock.unlock();
+
+
+        }
+    }
+    return;
+}
+

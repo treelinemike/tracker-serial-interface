@@ -398,6 +398,7 @@ int main(void){
                     // check for correct data length
                     if(this_msg.get_msg_size() < 5){
                         printf("Error: incorrect packet length, discarding packet\n");
+                        break;
                     }
                     memcpy(&data_size,packet_buffer+3,2);
                     if( data_size != 4 ){
@@ -408,6 +409,7 @@ int main(void){
                     // get probe serial number
                     if(this_msg.get_msg_size() < (long unsigned int)(8+data_size)){
                         printf("Error: incorrect packet length, discarding packet\n");
+                        break;
                     }
                     memcpy(&probe_sn,packet_buffer+5,4);
                     printf("Requested transform for probe s/n: 0x%08X\n",probe_sn);
