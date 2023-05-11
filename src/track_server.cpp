@@ -10,6 +10,7 @@
 #include <thread>
 #include <mutex>
 #include <cassert>
+#include <signal.h>
 
 #define AURORA_PORT_DESC "NDI Aurora"
 #define CLIENT_PORT_DESC "Prolific Technology"
@@ -34,6 +35,8 @@ class SimpleMsg {
         size_t msg_size;
         uint8_t *msg;
     public:
+
+        // constructor
         SimpleMsg(uint8_t mtype, size_t msize, uint8_t* mdata){
             msg_type = mtype;
             msg_size = msize;
@@ -41,12 +44,16 @@ class SimpleMsg {
             memcpy(msg, mdata, msize);
 
         }
+
+        // copy constructor 
         SimpleMsg(const SimpleMsg& orig){
             msg_type = orig.msg_type;
             msg_size = orig.msg_size;
             msg = (uint8_t*) malloc(msg_size);
             memcpy(msg, orig.msg, msg_size);
         }
+
+        // destructor - frees array memory upon destruction of the SimpleMsg object
         ~SimpleMsg(){
             free(msg);
         }
@@ -68,12 +75,14 @@ std::mutex msg_lock;
 static CombinedApi capi = CombinedApi();
 //static bool apiSupportsBX2 = false;
 //static bool apiSupportsStreaming = false;
+volatile bool exitflag = false;
 
 // function prototypes
 void monitor_serial_port(Serial* mySerialPort);
 void onErrorPrintDebugMessage(std::string methodName, int errorCode);
 std::string getToolInfo(std::string toolHandle);
 void initializeAndEnableTools(std::vector<ToolData>& enabledTools);
+void sig_callback_handler(int signum);
 
 // main
 int main(int argc, char** argv){
@@ -218,7 +227,7 @@ int main(int argc, char** argv){
 
     // start thread to read messages from the client
     printf("Starting thread to read from client serial connection...\n");
-    std::thread serial_thread (monitor_serial_port,mySerialPort);
+    std::thread serial_thread(monitor_serial_port,mySerialPort);
 
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
@@ -260,20 +269,23 @@ int main(int argc, char** argv){
     }
 
 
+    // register signal handler to catch CTRL-C
+    signal(SIGINT, sig_callback_handler);
+
+    // start data capture loop
     uint32_t prev_frame_num = 0;
     long unsigned int cap_num = 0;
-    //for(long unsigned int cap_num = 0; cap_num < 30000; cap_num++){
-    while(1){ // TODO: Exit more cleanly
-
+    while(!exitflag){ 
         ++cap_num;    
 
         if(wait_for_keypress){
             cout << "Press Enter to capture a transform..." << endl;
             std::cin.get();
         }
+
         if(listen_mode){
             capture_requested = false;
-            while(!capture_requested){
+            while(!capture_requested && !exitflag){
                 if(msg_buffer.size() > 0){
                     msg_lock.lock();
                     assertm( msg_buffer.size() > 0, "Vector length changed while acquirng lock.." );
@@ -426,6 +438,8 @@ int main(int argc, char** argv){
     // close output file
     outfile.close();
 
+    // join read thread
+    serial_thread.join();
 
     // close serial port
     if(!client_port_string.empty()){            
@@ -437,7 +451,7 @@ int main(int argc, char** argv){
     return 0;
 }
 
-// function from NDI to show error codes on failureS
+// function from NDI to show error codes on failure
 void onErrorPrintDebugMessage(std::string methodName, int errorCode)
 {
     if (errorCode < 0)
@@ -511,7 +525,7 @@ void monitor_serial_port(Serial* mySerialPort){
     // loop forever, capturing bytes from serial stream and
     // processing packets when they are identified
     printf("Parsing data from serial port...\n");
-    while(1){
+    while(!exitflag){
 
         // reset all parsing variables
         p_start_search = byte_buffer;
@@ -626,7 +640,7 @@ void monitor_serial_port(Serial* mySerialPort){
 
                 // increment byte buffer pointer, un-stuffing DLEs
                 if((*p_byte_copy == DLE) && ((p_byte_copy+1) < p_byte_end) && (*(p_byte_copy+1) == DLE) ){
-                    p_byte_copy = p_byte_copy +2;
+                    p_byte_copy = p_byte_copy + 2;
                 } else {
                     ++p_byte_copy;
                 }
@@ -710,6 +724,12 @@ void monitor_serial_port(Serial* mySerialPort){
 
         }
     }
+    return;
+}
+
+// signal handler to stop data collection, etc. on CTRL-C
+void sig_callback_handler(int signum){
+    exitflag = true;
     return;
 }
 
