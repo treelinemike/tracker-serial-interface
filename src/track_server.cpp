@@ -34,11 +34,21 @@ class SimpleMsg {
         size_t msg_size;
         uint8_t *msg;
     public:
-        void set_msg(uint8_t mtype, size_t msize, uint8_t* mdata){
-            this->msg_type = mtype;
-            this->msg_size = msize;
-            this->msg = (uint8_t*) malloc(msize);
-            memcpy(this->msg, mdata, msize);
+        SimpleMsg(uint8_t mtype, size_t msize, uint8_t* mdata){
+            msg_type = mtype;
+            msg_size = msize;
+            msg = (uint8_t*) malloc(msize);
+            memcpy(msg, mdata, msize);
+
+        }
+        SimpleMsg(const SimpleMsg& orig){
+            msg_type = orig.msg_type;
+            msg_size = orig.msg_size;
+            msg = (uint8_t*) malloc(msg_size);
+            memcpy(msg, orig.msg, msg_size);
+        }
+        ~SimpleMsg(){
+            free(msg);
         }
         uint8_t get_msg_type(){
             return this->msg_type;
@@ -72,7 +82,7 @@ int main(int argc, char** argv){
     uint8_t mypacket[MAX_PACKET_LENGTH] = {0};
     size_t mypacket_length = MAX_PACKET_LENGTH;
     uint32_t frame_num, probe_sn;
-    uint8_t tool_num;
+    //uint8_t tool_num;
     float q[SIZE_Q] = {0.0F};
     float t[SIZE_T] = {0.0F};
     float trk_fit_err;
@@ -267,7 +277,7 @@ int main(int argc, char** argv){
                 if(msg_buffer.size() > 0){
                     msg_lock.lock();
                     assertm( msg_buffer.size() > 0, "Vector length changed while acquirng lock.." );
-                    SimpleMsg this_msg = msg_buffer[0];
+                    SimpleMsg this_msg(msg_buffer[0]);
                     msg_buffer.erase(msg_buffer.begin());
                     msg_lock.unlock();
                     packet_buffer = this_msg.get_msg_buffer();
@@ -303,6 +313,7 @@ int main(int argc, char** argv){
                     } else {
                         printf("Received a non-transform requet packet, discarding\n");
                     }
+
                 }
             }
         }
@@ -352,7 +363,7 @@ int main(int argc, char** argv){
             } else {
                 cout << (cap_num+1) << ": new(" << tool_idx << "/" << frame_num << ")" << endl;
 
-                tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
+                //tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
                 q[0] = (float)enabledTools[tool_idx].transform.q0;
                 q[1] = (float)enabledTools[tool_idx].transform.qx;
                 q[2] = (float)enabledTools[tool_idx].transform.qy;
@@ -556,7 +567,7 @@ void monitor_serial_port(Serial* mySerialPort){
                ++p_display;
                }
                printf("\n");
-             */
+               */
         }
 
         // try to find DLE ETX
@@ -584,7 +595,7 @@ void monitor_serial_port(Serial* mySerialPort){
                } else {
                printf("No end found\n");
                }
-             */
+               */
         }
 
         // now we have a full message
@@ -631,7 +642,7 @@ void monitor_serial_port(Serial* mySerialPort){
             ++p_display;
             }
             printf("\n");
-             */
+            */
 
             // reset byte buffer
             // i.e. copy everything past message we extracted back to the beginning of the buffer
@@ -652,7 +663,7 @@ void monitor_serial_port(Serial* mySerialPort){
             ++p_display;
             }
             printf("\n");
-             */
+            */
 
         }
 
@@ -691,8 +702,7 @@ void monitor_serial_port(Serial* mySerialPort){
             //printf("Received packet of type 0x%02X and length %d\n",packet_type,packet_length);
 
             // create a new message object and put it into vector           
-            SimpleMsg new_msg;
-            new_msg.set_msg(packet_type,packet_length,packet_buffer);
+            SimpleMsg new_msg(packet_type,packet_length,packet_buffer);
             msg_lock.lock();
             msg_buffer.push_back(new_msg);
             msg_lock.unlock();

@@ -28,7 +28,7 @@ int main(void){
     uint8_t *p_byte, *p_start_search, *p_stop_search, *p_byte_copy;
     uint8_t start_found_flag, end_found_flag, crc_verified_flag;
     uint8_t DLE_count = 0;
-    uint8_t *p_display = byte_buffer;
+    //uint8_t *p_display = byte_buffer;
     uint32_t packet_length;
     uint8_t packet_buffer[PACKET_BUFFER_LENGTH] = {0};
     uint8_t *p_packet = packet_buffer;
@@ -41,7 +41,7 @@ int main(void){
 
     // ensure that we're on a linux or darwin (apple) system
     // TODO: handle Windows, etc.
-#ifdef __linux__{
+#ifdef __linux__
         printf("Running on linux\n");
 #elif __APPLE__
         printf("Running on darwin\n");
