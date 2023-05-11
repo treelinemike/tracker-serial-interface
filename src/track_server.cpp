@@ -272,6 +272,15 @@ int main(int argc, char** argv){
     // register signal handler to catch CTRL-C
     signal(SIGINT, sig_callback_handler);
 
+
+    if(wait_for_keypress){
+        cout << "Press ENTER to capture a transform, CTRL+C to end...";
+    } else if(listen_mode){
+        cout << "Listening for transform requests via serial link, CTRL+C then ENTER to end..." << endl;
+    } else {
+        cout << "Streaming transforms via serial link, CTRL+C to end..." << endl;
+    }
+
     // start data capture loop
     uint32_t prev_frame_num = 0;
     long unsigned int cap_num = 0;
@@ -279,7 +288,6 @@ int main(int argc, char** argv){
         ++cap_num;    
 
         if(wait_for_keypress){
-            cout << "Press Enter to capture a transform..." << endl;
             std::cin.get();
         }
 
@@ -330,6 +338,8 @@ int main(int argc, char** argv){
             }
         }
 
+        if( exitflag )
+            break;
 
         // get a set of transforms
         transform_sent = false;
@@ -367,14 +377,16 @@ int main(int argc, char** argv){
             // get new frame number
             frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
 
-            cout << " Tool " << tool_idx << " [" << enabledTools[tool_idx].toolInfo << "]: ";
+            cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tool " << enabledTools[tool_idx].toolInfo; 
             if( enabledTools[tool_idx].transform.isMissing() ){
-                cout << "missing" << endl;
+                cout << " --> MISSING!";
             } else if( frame_num == prev_frame_num ){
-                cout << "repeat" << endl;
+                cout << " --> REPEAT!";
             } else {
-                cout << (cap_num+1) << ": new(" << tool_idx << "/" << frame_num << ")" << endl;
-
+                if(!wait_for_keypress){
+                    cout << endl;
+                }
+                
                 //tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
                 q[0] = (float)enabledTools[tool_idx].transform.q0;
                 q[1] = (float)enabledTools[tool_idx].transform.qx;
@@ -385,7 +397,6 @@ int main(int argc, char** argv){
                 t[2] = (float)enabledTools[tool_idx].transform.tz;
                 trk_fit_err = (float)enabledTools[tool_idx].transform.error;
 
-                //cout << "quat: " << q[0] << q[1] << q[2] << q[3] << endl; 
 
                 mypacket_length = MAX_PACKET_LENGTH;
                 result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_idx, q, SIZE_Q, t, SIZE_T, trk_fit_err);
