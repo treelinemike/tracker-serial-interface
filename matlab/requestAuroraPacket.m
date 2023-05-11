@@ -28,7 +28,7 @@ msg = [DLE_BYTE STX_BYTE];
 
 for i = 1:length(payload)
     msg(end+1) = payload(i);
-    if(payload(i) == DLE_BYTE)
+    if(payload(i) == DLE_BYTE)  % handle DLE stuffing
         msg(end+1) = DLE_BYTE;
     end
 end
