@@ -23,9 +23,11 @@
 #define BYTE_BUFFER_LENGTH 2048
 #define PACKET_BUFFER_LENGTH 255
 #define assertm(exp, msg) assert(((void)msg, exp))
+#define MAX_PROBES 4
 
 using namespace std;
 using namespace serial;
+
 
 // TODO: refactor into headers, etc.
 // simple class for representing a serial message
@@ -91,9 +93,12 @@ int main(int argc, char** argv){
     uint8_t mypacket[MAX_PACKET_LENGTH] = {0};
     size_t mypacket_length = MAX_PACKET_LENGTH;
     uint32_t frame_num, probe_sn;
+    uint32_t probes_requested[MAX_PROBES] = {0};
+    uint8_t num_probes_requested = 0;
+
     //uint8_t tool_num;
-    float q[SIZE_Q] = {0.0F};
-    float t[SIZE_T] = {0.0F};
+    //float q[SIZE_Q] = {0.0F};
+    //float t[SIZE_T] = {0.0F};
     float trk_fit_err;
     int result;
     bool capture_requested = false;
@@ -293,6 +298,7 @@ int main(int argc, char** argv){
 
         if(listen_mode){
             capture_requested = false;
+            num_probes_requested = 0;
             while(!capture_requested && !exitflag){
                 if(msg_buffer.size() > 0){
                     msg_lock.lock();
@@ -314,17 +320,20 @@ int main(int argc, char** argv){
                         }
 
                         // make sure data payload size is correct
-                        if( capture_requested && (data_size < 4) ){
+                        if( capture_requested && (data_size <= 4) ){
                             printf("Error: incorrect payload data size, discarding packet\n");
                             capture_requested = false;
                         }
 
+                        // TODO: GET MULTIPLE SERIAL NUMBERS
+
+
                         // get probe serial number
                         if(capture_requested && (this_msg.get_msg_size() >= (long unsigned int)(8+data_size))){
-                            memcpy(&probe_sn,packet_buffer+5,4);
-                            sprintf(probe_sn_str,"NDI%08X",probe_sn);
-                            printf("Requested transform for probe s/n: 0x%08X\n",probe_sn);
-                            //printf("string<%s>\n",probe_sn_str);
+                            memcpy((probes_requested+num_probes_requested),packet_buffer+5,4);
+
+                            printf("Requested transform for probe s/n: 0x%08X\n",*(probes_requested + num_probes_requested));
+                            ++num_probes_requested;
                         } else {
                             printf("Error: incorrect packet length, discarding packet\n");
                             capture_requested = false;    
@@ -372,12 +381,20 @@ int main(int argc, char** argv){
         } 
 
         // construct and send a packet for each tool
+        std::vector<tform> tforms;
         for(long unsigned int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
+
+            // create a transform
+            tform thistf;
 
             // get new frame number
             frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
 
-            cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tool " << enabledTools[tool_idx].toolInfo; 
+            // get tool serial number, convert from cstr to integer
+            probe_sn = (uint32_t)strtol(enabledTools[tool_idx].toolInfo.c_str()+3,nullptr,16);
+
+            cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tool ";
+            printf("0x%04X",probe_sn); // TODO: do this the c++ way with cout
             if( enabledTools[tool_idx].transform.isMissing() ){
                 cout << " --> MISSING!";
             } else if( frame_num == prev_frame_num ){
@@ -386,38 +403,38 @@ int main(int argc, char** argv){
                 if(!wait_for_keypress){
                     cout << endl;
                 }
-                
+
                 //tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
-                q[0] = (float)enabledTools[tool_idx].transform.q0;
-                q[1] = (float)enabledTools[tool_idx].transform.qx;
-                q[2] = (float)enabledTools[tool_idx].transform.qy;
-                q[3] = (float)enabledTools[tool_idx].transform.qz;
-                t[0] = (float)enabledTools[tool_idx].transform.tx;
-                t[1] = (float)enabledTools[tool_idx].transform.ty;
-                t[2] = (float)enabledTools[tool_idx].transform.tz;
-                trk_fit_err = (float)enabledTools[tool_idx].transform.error;
+
+                thistf.id = probe_sn;
+                thistf.q0 = (float)enabledTools[tool_idx].transform.q0;
+                thistf.q1 = (float)enabledTools[tool_idx].transform.qx;
+                thistf.q2 = (float)enabledTools[tool_idx].transform.qy;
+                thistf.q3 = (float)enabledTools[tool_idx].transform.qz;
+                thistf.tx = (float)enabledTools[tool_idx].transform.tx;
+                thistf.ty = (float)enabledTools[tool_idx].transform.ty;
+                thistf.tz = (float)enabledTools[tool_idx].transform.tz;
+                thistf.error = (float)enabledTools[tool_idx].transform.error;
 
 
-                mypacket_length = MAX_PACKET_LENGTH;
-                result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_idx, q, SIZE_Q, t, SIZE_T, trk_fit_err);
-                if( result != 0 ){
-                    printf("Error: unexpected result from packet composition (%d)\n",result);
-                    return -1;
-                }
+                if( !(listen_mode && !this_packet_requested) ){    
+                    tforms.push_back(thistf);
+                    outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
+                    outfile << thistf.q0 << "," << thistf.q1 << "," << thistf.q2 << "," << thistf.q3 << ",";
+                    outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
+                    outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
+                    outfile << thistf.error << endl;   
+                } 
+
 
                 // write packet to serial port and file
                 if(!client_port_string.empty()){
                     if(listen_mode){
-                        if(!strcmp(enabledTools[tool_idx].toolInfo.c_str(),probe_sn_str)){
+                        if(probe_sn == probe_sn_req){
                             mySerialPort->write(mypacket,mypacket_length);
                             transform_sent = true;
 
                             // write line to file
-                            outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
-                            outfile << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ",";
-                            outfile << t[0] << "," << t[1] << "," << t[2] << ",";
-                            outfile << t[0] << "," << t[1] << "," << t[2] << ",";
-                            outfile << trk_fit_err << endl;   
                         }
                     } else {
                         mySerialPort->write(mypacket,mypacket_length);
@@ -433,6 +450,17 @@ int main(int argc, char** argv){
 
             }
         }
+
+
+        mypacket_length = MAX_PACKET_LENGTH;
+        result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_idx, q, SIZE_Q, t, SIZE_T, trk_fit_err);
+        if( result != 0 ){
+            printf("Error: unexpected result from packet composition (%d)\n",result);
+            return -1;
+        }
+
+
+
         if(listen_mode && !transform_sent){
             // TODO SEND NAK PACKET
             printf("Error could not send requested transform!\n");
@@ -592,7 +620,7 @@ void monitor_serial_port(Serial* mySerialPort){
                ++p_display;
                }
                printf("\n");
-               */
+             */
         }
 
         // try to find DLE ETX
@@ -620,7 +648,7 @@ void monitor_serial_port(Serial* mySerialPort){
                } else {
                printf("No end found\n");
                }
-               */
+             */
         }
 
         // now we have a full message
@@ -667,7 +695,7 @@ void monitor_serial_port(Serial* mySerialPort){
             ++p_display;
             }
             printf("\n");
-            */
+             */
 
             // reset byte buffer
             // i.e. copy everything past message we extracted back to the beginning of the buffer
@@ -688,7 +716,7 @@ void monitor_serial_port(Serial* mySerialPort){
             ++p_display;
             }
             printf("\n");
-            */
+             */
 
         }
 

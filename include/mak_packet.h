@@ -31,11 +31,16 @@
 #define SIZE_T                    3
 #define MAX_PACKET_LENGTH         255
 
+// struct for transform data
+struct tform{
+    uint32_t id;
+    float q0,q1,q2,q3,tx,ty,tz,error;
+};
 
 /* * * * * Function Prototypes * * * * */
 
 // build a tracker transform data packet
-int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, uint8_t tool_num, float *q, size_t q_size, float* t, size_t t_size, float trk_fit_error);
+int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, std::vector<tform>& tforms, float trk_fit_error);
 
 // add some number of bytes to a byte array serial packet
 // stuffing DLE and/or updating CRC if required

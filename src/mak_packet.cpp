@@ -68,7 +68,7 @@ int add_bytes_to_packet(uint8_t* chars_to_add, size_t num_chars_to_add, uint8_t*
 }
 
 // build a tracker packet 
-int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, uint8_t tool_num, float *q, size_t q_size, float* t, size_t t_size, float trk_fit_error){
+int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t frame_num, std::vector<tform>& tforms,float trk_fit_error){
 
     int result;
 
@@ -102,6 +102,14 @@ int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t fram
         return result;
     //printf("Done. CRC = 0x%02X\n",CRC);
 
+
+    // add each transform
+    for( auto & thistf : tforms ){
+        // nop
+    }
+
+
+    /*
     // add tool number
     //printf("Adding tool number\n");
     if((result = add_bytes_to_packet(&tool_num, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
@@ -134,6 +142,7 @@ int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t fram
     if((result = add_bytes_to_packet((uint8_t*)(&trk_fit_error), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
         return result;
     //printf("Done. CRC = 0x%02X\n",CRC);
+    */
 
     // add CRC
     if((result = add_bytes_to_packet(&CRC, 1, packet, packet_length, max_packet_length, &CRC, false, true)) != 0)
