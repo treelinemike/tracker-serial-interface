@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include <vector>
+#include <cstring>
 
 // application definitions
 #define PKT_TYPE_TRANSFORM_DATA   0x01

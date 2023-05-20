@@ -2,7 +2,7 @@
  *
  * Custom serial packet definitions and associated functions.
  *
- * Updated:  2022-12-27
+ * Updated:  19-May-2023
  * Author: 	 M. Kokko
  *
  */
@@ -105,44 +105,26 @@ int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t fram
 
     // add each transform
     for( auto & thistf : tforms ){
-        // nop
+
+        // array for transform data
+        uint8_t newdata[36] = {0};
+
+        // memcpy transform data into the array
+        memcpy(newdata,&(thistf.id),4);
+        memcpy(newdata+4,&(thistf.q0),4);
+        memcpy(newdata+8,&(thistf.q1),4);
+        memcpy(newdata+12,&(thistf.q2),4);
+        memcpy(newdata+16,&(thistf.q3),4);
+        memcpy(newdata+20,&(thistf.t0),4);
+        memcpy(newdata+24,&(thistf.t1),4);
+        memcpy(newdata+28,&(thistf.t2),4);
+        memcpy(newdata+32,&(thistf.error),4);
+
+        // add the array to the current packet with DLE stuffing and CRC computation
+        if((result = add_bytes_to_packet(newdata,36, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+            return result;
     }
 
-
-    /*
-    // add tool number
-    //printf("Adding tool number\n");
-    if((result = add_bytes_to_packet(&tool_num, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
-        return result;
-    //printf("Done. CRC = 0x%02X\n",CRC);
-
-    // add four float32 quaternion components
-    //printf("Adding quaternion\n");
-    for(unsigned int qidx = 0; qidx < q_size; qidx++){
-        
-        // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each quaternion component
-        if((result = add_bytes_to_packet((uint8_t*)(q+qidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
-            return result;
-        //printf("q[%d] = %8.4f\n",qidx,*(q+qidx));
-        //printf("Added quaternion component. CRC = 0x%02X\n",CRC);
-    } 
-
-    // add three float32 translation components
-    //printf("Adding translation\n");
-    for(unsigned int tidx = 0; tidx < t_size; tidx++){
-        // since sizeof(float) == 4, add 4 bytes to packet (little endian) for each translation component
-        if((result = add_bytes_to_packet((uint8_t*)(t+tidx), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
-            return result;
-        //printf("t[%d] = %8.4f\n",tidx,*(t+tidx));
-        //printf("Added translation component. CRC = 0x%02X\n",CRC);
-    } 
-
-    // add error as reported by tracker
-    //printf("Adding tracking error\n");
-    if((result = add_bytes_to_packet((uint8_t*)(&trk_fit_error), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
-        return result;
-    //printf("Done. CRC = 0x%02X\n",CRC);
-    */
 
     // add CRC
     if((result = add_bytes_to_packet(&CRC, 1, packet, packet_length, max_packet_length, &CRC, false, true)) != 0)

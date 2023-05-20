@@ -18,8 +18,8 @@
 #define REQUIRE_AURORA false
 #define REQUIRE_CLIENT false
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
-#define STATIC_PORT_AURORA "/dev/ttyUSB0"
+#define STATIC_PORT_CLIENT "/dev/ttyUSB0"
+#define STATIC_PORT_AURORA "/dev/ttyUSB1"
 #define BAUDRATE 115200U
 #define BYTE_BUFFER_LENGTH 2048
 #define PACKET_BUFFER_LENGTH 255
@@ -96,14 +96,14 @@ int main(int argc, char** argv){
     uint32_t frame_num, probe_sn;
     uint32_t probes_requested[MAX_PROBES] = {0};
     uint8_t num_probes_requested = 0;
+    std::vector<ToolData> enabledTools = std::vector<ToolData>();
 
     //uint8_t tool_num;
     //float q[SIZE_Q] = {0.0F};
     //float t[SIZE_T] = {0.0F};
     int result;
     bool capture_requested = false;
-    bool transform_sent = false;
-    uint16_t data_size;
+    uint8_t data_size;
     uint8_t *packet_buffer;
 
     // parse command line options
@@ -233,6 +233,7 @@ int main(int argc, char** argv){
     printf("Starting thread to read from client serial connection...\n");
     std::thread serial_thread(monitor_serial_port,mySerialPort);
 
+    /*
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
         printf("Error connecting to NDI API...\r");
@@ -260,7 +261,6 @@ int main(int argc, char** argv){
 
 
     // initialize and enable tools
-    std::vector<ToolData> enabledTools = std::vector<ToolData>();
     initializeAndEnableTools(enabledTools);
 
     cout << "Number of tools found: " << enabledTools.size() << endl;
@@ -271,7 +271,7 @@ int main(int argc, char** argv){
         cout << "Error entering tracking mode." << endl;
         return -1;
     }
-
+*/
 
     // register signal handler to catch CTRL-C
     signal(SIGINT, sig_callback_handler);
@@ -322,7 +322,7 @@ int main(int argc, char** argv){
 
                         // make sure data payload size is correct
                         if( capture_requested && (data_size > 4) ){
-                            printf("Error: incorrect payload data size, discarding packet\n");
+                            printf("Error: incorrect payload data size (%d), discarding packet\n",data_size);
                             capture_requested = false;
                         }
 
@@ -334,11 +334,11 @@ int main(int argc, char** argv){
 
                         // get serial number of each requested probe and store in array
                         if(capture_requested){
-                            printf("Requested transform for probes(s): ");
+                            printf("Requested transform for probes(s):");
                             for(uint8_t id_idx = 0; id_idx < data_size; ++id_idx){
                                 memcpy((probes_requested+num_probes_requested),packet_buffer+4+4*id_idx,4);
-                                ++num_probes_requested;
                                 printf(" 0x%08X",*(probes_requested + num_probes_requested));
+                                ++num_probes_requested;
                             }
                             printf("\n");
                         }
@@ -354,7 +354,6 @@ int main(int argc, char** argv){
             break;
 
         // get a set of transforms
-        transform_sent = false;
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
         //cout << "Size of new tool data vector: " << newToolData.size() << endl;
 
@@ -416,7 +415,6 @@ int main(int argc, char** argv){
                     }
                 }
 
-
                 // capture transform for transmission *unless* we're in listen mode and this wasn't in the request list
                 if( !(listen_mode && !this_packet_requested) ){    
                     thistf.id = probe_sn;
@@ -438,7 +436,7 @@ int main(int argc, char** argv){
             }
         }
 
-
+        // now send a response packet with however many transforms (0 or more) we have accumulated
         mypacket_length = MAX_PACKET_LENGTH;
         result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tforms);
         if( result != 0 ){
@@ -447,11 +445,6 @@ int main(int argc, char** argv){
         }
         mySerialPort->write(mypacket,mypacket_length);
 
-
-        if(listen_mode && !transform_sent){
-            // TODO SEND NAK PACKET
-            printf("Error could not send requested transform!\n");
-        }
     }
 
     cout << "Stopping tracking" << endl;
