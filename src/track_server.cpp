@@ -233,7 +233,6 @@ int main(int argc, char** argv){
     printf("Starting thread to read from client serial connection...\n");
     std::thread serial_thread(monitor_serial_port,mySerialPort);
 
-    /*
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
     printf("Error connecting to NDI API...\r");
@@ -271,7 +270,6 @@ int main(int argc, char** argv){
     cout << "Error entering tracking mode." << endl;
     return -1;
     }
-    */
 
     // register signal handler to catch CTRL-C
     signal(SIGINT, sig_callback_handler);
@@ -353,7 +351,6 @@ int main(int argc, char** argv){
         if( exitflag )
             break;
 
-        /* COMMENTED TO SIMULATE
         // get a set of transforms
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
         //cout << "Size of new tool data vector: " << newToolData.size() << endl;
@@ -362,108 +359,80 @@ int main(int argc, char** argv){
         // double loop structure from NDI sample program
         // likely b/c tool data may come in in a different order than the enabledTools vector?
         for(long unsigned int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
-        for(long unsigned int data_idx = 0; data_idx < newToolData.size(); data_idx++){
-        if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
-        newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
-        enabledTools[tool_idx] = newToolData[data_idx];
+            for(long unsigned int data_idx = 0; data_idx < newToolData.size(); data_idx++){
+                if(enabledTools[tool_idx].transform.toolHandle == newToolData[data_idx].transform.toolHandle){
+                    newToolData[data_idx].toolInfo = enabledTools[tool_idx].toolInfo; // preserves serial number
+                    enabledTools[tool_idx] = newToolData[data_idx];
 
-        //cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
+                    //cout << "tool info: " << newToolData[data_idx].toolInfo << endl; 
 
-        }
-        }
+                }
+            }
         } 
 
         // construct and send a packet for each tool
         std::vector<tform> tforms;
         for(long unsigned int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
 
-        // create a transform struct
-        tform thistf;
+            // create a transform struct
+            tform thistf;
 
-        // get the current frame number
-        frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
+            // get the current frame number
+            frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
 
-        // get tool serial number, convert from cstr to integer
-        probe_sn = (uint32_t)strtol(enabledTools[tool_idx].toolInfo.c_str()+3,nullptr,16);
-        if(tool_idx == 0){           
-        cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tools:";
+            // get tool serial number, convert from cstr to integer
+            probe_sn = (uint32_t)strtol(enabledTools[tool_idx].toolInfo.c_str()+3,nullptr,16);
+            if(tool_idx == 0){           
+                cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tools:";
+            }
+            printf(" 0x%04X",probe_sn); // TODO: do this the c++ way with cout
+            if( enabledTools[tool_idx].transform.isMissing() ){
+                cout << " --> MISSING!";
+            } else if( frame_num == prev_frame_num ){
+                cout << " --> REPEAT!";
+            } else {
+                if(!wait_for_keypress){
+                    cout << endl;
+                }
+
+                // determine whether this was one of the transforms we requested
+                bool this_packet_requested = false;
+                for(uint8_t id_idx = 0; id_idx < num_probes_requested; ++id_idx){
+                    if( *(probes_requested + id_idx) == probe_sn){
+                        this_packet_requested = true;
+                    }
+                }
+
+                // capture transform for transmission *unless* we're in listen mode and this wasn't in the request list
+                if( !(listen_mode && !this_packet_requested) ){    
+                    thistf.id = probe_sn;
+                    thistf.q0 = (float)enabledTools[tool_idx].transform.q0;
+                    thistf.q1 = (float)enabledTools[tool_idx].transform.qx;
+                    thistf.q2 = (float)enabledTools[tool_idx].transform.qy;
+                    thistf.q3 = (float)enabledTools[tool_idx].transform.qz;
+                    thistf.t0 = (float)enabledTools[tool_idx].transform.tx;
+                    thistf.t1 = (float)enabledTools[tool_idx].transform.ty;
+                    thistf.t2 = (float)enabledTools[tool_idx].transform.tz;
+                    thistf.error = (float)enabledTools[tool_idx].transform.error;
+                    tforms.push_back(thistf);
+                    outfile << frame_num << "," << frame_num << "," << probe_sn << ",";
+                    outfile << thistf.q0 << "," << thistf.q1 << "," << thistf.q2 << "," << thistf.q3 << ",";
+                    outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
+                    outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
+                    outfile << thistf.error << endl;   
+                } 
+            }
         }
-        printf(" 0x%04X",probe_sn); // TODO: do this the c++ way with cout
-        if( enabledTools[tool_idx].transform.isMissing() ){
-        cout << " --> MISSING!";
-        } else if( frame_num == prev_frame_num ){
-        cout << " --> REPEAT!";
-        } else {
-        if(!wait_for_keypress){
-        cout << endl;
+
+        // now send a response packet with however many transforms (0 or more) we have accumulated
+        mypacket_length = MAX_PACKET_LENGTH;
+        result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tforms);
+        if( result != 0 ){
+            printf("Error: unexpected result from packet composition (%d)\n",result);
+            return -1;
         }
-
-        // determine whether this was one of the transforms we requested
-        bool this_packet_requested = false;
-        for(uint8_t id_idx = 0; id_idx < num_probes_requested; ++id_idx){
-        if( *(probes_requested + id_idx) == probe_sn){
-        this_packet_requested = true;
-        }
-        }
-
-        // capture transform for transmission *unless* we're in listen mode and this wasn't in the request list
-        if( !(listen_mode && !this_packet_requested) ){    
-        thistf.id = probe_sn;
-        thistf.q0 = (float)enabledTools[tool_idx].transform.q0;
-        thistf.q1 = (float)enabledTools[tool_idx].transform.qx;
-        thistf.q2 = (float)enabledTools[tool_idx].transform.qy;
-        thistf.q3 = (float)enabledTools[tool_idx].transform.qz;
-        thistf.t0 = (float)enabledTools[tool_idx].transform.tx;
-        thistf.t1 = (float)enabledTools[tool_idx].transform.ty;
-        thistf.t2 = (float)enabledTools[tool_idx].transform.tz;
-        thistf.error = (float)enabledTools[tool_idx].transform.error;
-        tforms.push_back(thistf);
-        outfile << frame_num << "," << frame_num << "," << probe_sn << ",";
-        outfile << thistf.q0 << "," << thistf.q1 << "," << thistf.q2 << "," << thistf.q3 << ",";
-        outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
-        outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
-        outfile << thistf.error << endl;   
-        } 
-    }
-    }
-    */
-
-        frame_num = 123;
-    std::vector<tform> tforms;
-    tform thistf;
-    thistf.id = 0x12345678;
-    thistf.q0 = 0.8182;
-    thistf.q1 = 0.3824;
-    thistf.q2 = 0.4251;
-    thistf.q3 = 0.0596;
-    thistf.t0 = 2.15;
-    thistf.t1 = -50.44;
-    thistf.t2 = 1280.31;
-    thistf.error = 0.052;
-    tforms.push_back(thistf);
-    thistf.id = 0xAABBCCDD;
-    thistf.q0 = 0.7720;
-    thistf.q1 = 0.4452;
-    thistf.q2 = 0.0727;
-    thistf.q3 = 0.4478;
-    thistf.t0 = 87.15;
-    thistf.t1 = 2001.77;
-    thistf.t2 = 0.432;
-    thistf.error = 0.210;
-    tforms.push_back(thistf);
-
-
-
-
-    // now send a response packet with however many transforms (0 or more) we have accumulated
-    mypacket_length = MAX_PACKET_LENGTH;
-    result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tforms);
-    if( result != 0 ){
-        printf("Error: unexpected result from packet composition (%d)\n",result);
-        return -1;
-    }
-    cout << "Writing packet to serial port..." << endl;
-    mySerialPort->write(mypacket,mypacket_length);
+        cout << "Writing packet to serial port..." << endl;
+        mySerialPort->write(mypacket,mypacket_length);
 
     }
 
