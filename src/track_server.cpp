@@ -11,14 +11,15 @@
 #include <mutex>
 #include <cassert>
 #include <signal.h>
+#include <vector>
 
 #define AURORA_PORT_DESC "NDI Aurora"
 #define CLIENT_PORT_DESC "Prolific Technology"
 #define REQUIRE_AURORA false
 #define REQUIRE_CLIENT false
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
-#define STATIC_PORT_AURORA "/dev/ttyUSB0"
+#define STATIC_PORT_CLIENT "/dev/ttyUSB0"
+#define STATIC_PORT_AURORA "/dev/ttyUSB1"
 #define BAUDRATE 115200U
 #define BYTE_BUFFER_LENGTH 2048
 #define PACKET_BUFFER_LENGTH 255
@@ -95,16 +96,14 @@ int main(int argc, char** argv){
     uint32_t frame_num, probe_sn;
     uint32_t probes_requested[MAX_PROBES] = {0};
     uint8_t num_probes_requested = 0;
+    std::vector<ToolData> enabledTools = std::vector<ToolData>();
 
     //uint8_t tool_num;
     //float q[SIZE_Q] = {0.0F};
     //float t[SIZE_T] = {0.0F};
-    float trk_fit_err;
     int result;
     bool capture_requested = false;
-    bool transform_sent = false;
-    char probe_sn_str[12] = {0};
-    uint16_t data_size;
+    uint8_t data_size;
     uint8_t *packet_buffer;
 
     // parse command line options
@@ -234,6 +233,7 @@ int main(int argc, char** argv){
     printf("Starting thread to read from client serial connection...\n");
     std::thread serial_thread(monitor_serial_port,mySerialPort);
 
+    /*
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
         printf("Error connecting to NDI API...\r");
@@ -261,7 +261,6 @@ int main(int argc, char** argv){
 
 
     // initialize and enable tools
-    std::vector<ToolData> enabledTools = std::vector<ToolData>();
     initializeAndEnableTools(enabledTools);
 
     cout << "Number of tools found: " << enabledTools.size() << endl;
@@ -272,7 +271,7 @@ int main(int argc, char** argv){
         cout << "Error entering tracking mode." << endl;
         return -1;
     }
-
+*/
 
     // register signal handler to catch CTRL-C
     signal(SIGINT, sig_callback_handler);
@@ -311,38 +310,42 @@ int main(int argc, char** argv){
 
                     if(this_msg.get_msg_type() == PKT_TYPE_GET_PROBE_TFORM){
 
-                        // get data payload size
+                        // TODO: SEND NAK IF ANY OF THESE ERRORS OCCUR
+
+                        // get data payload size (number of transform serial numbers being transmitted)
                         if(capture_requested && (this_msg.get_msg_size() >= 5)){
-                            memcpy(&data_size,packet_buffer+3,2);
+                            memcpy(&data_size,packet_buffer+3,1);
                         } else {
                             printf("Error: incorrect packet length, discarding packet\n");
                             capture_requested = false;
                         }
 
                         // make sure data payload size is correct
-                        if( capture_requested && (data_size <= 4) ){
-                            printf("Error: incorrect payload data size, discarding packet\n");
+                        if( capture_requested && (data_size > 4) ){
+                            printf("Error: incorrect payload data size (%d), discarding packet\n",data_size);
                             capture_requested = false;
                         }
 
-                        // TODO: GET MULTIPLE SERIAL NUMBERS
+                        // make sure message length is correct
+                        if( capture_requested && (this_msg.get_msg_size() != (long unsigned int)(7+4*data_size))){
+                            printf("Error: wrong message size (%ld) for number of transforms requested, discarding packet\n",this_msg.get_msg_size());
+                            capture_requested = false;
+                        }
 
-
-                        // get probe serial number
-                        if(capture_requested && (this_msg.get_msg_size() >= (long unsigned int)(8+data_size))){
-                            memcpy((probes_requested+num_probes_requested),packet_buffer+5,4);
-
-                            printf("Requested transform for probe s/n: 0x%08X\n",*(probes_requested + num_probes_requested));
-                            ++num_probes_requested;
-                        } else {
-                            printf("Error: incorrect packet length, discarding packet\n");
-                            capture_requested = false;    
+                        // get serial number of each requested probe and store in array
+                        if(capture_requested){
+                            printf("Requested transform for probes(s):");
+                            for(uint8_t id_idx = 0; id_idx < data_size; ++id_idx){
+                                memcpy((probes_requested+num_probes_requested),packet_buffer+4+4*id_idx,4);
+                                printf(" 0x%08X",*(probes_requested + num_probes_requested));
+                                ++num_probes_requested;
+                            }
+                            printf("\n");
                         }
 
                     } else {
                         printf("Received a non-transform requet packet, discarding\n");
                     }
-
                 }
             }
         }
@@ -351,7 +354,6 @@ int main(int argc, char** argv){
             break;
 
         // get a set of transforms
-        transform_sent = false;
         std::vector<ToolData> newToolData = capi.getTrackingDataBX(TrackingReplyOption::TransformData | TrackingReplyOption::AllTransforms);
         //cout << "Size of new tool data vector: " << newToolData.size() << endl;
 
@@ -384,17 +386,18 @@ int main(int argc, char** argv){
         std::vector<tform> tforms;
         for(long unsigned int tool_idx = 0; tool_idx < enabledTools.size(); tool_idx++){
 
-            // create a transform
+            // create a transform struct
             tform thistf;
 
-            // get new frame number
+            // get the current frame number
             frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
 
             // get tool serial number, convert from cstr to integer
             probe_sn = (uint32_t)strtol(enabledTools[tool_idx].toolInfo.c_str()+3,nullptr,16);
-
-            cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tool ";
-            printf("0x%04X",probe_sn); // TODO: do this the c++ way with cout
+            if(tool_idx == 0){           
+                cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tools:";
+            }
+            printf(" 0x%04X",probe_sn); // TODO: do this the c++ way with cout
             if( enabledTools[tool_idx].transform.isMissing() ){
                 cout << " --> MISSING!";
             } else if( frame_num == prev_frame_num ){
@@ -404,67 +407,44 @@ int main(int argc, char** argv){
                     cout << endl;
                 }
 
-                //tool_num = (uint8_t) enabledTools[tool_idx].transform.toolHandle;
+                // determine whether this was one of the transforms we requested
+                bool this_packet_requested = false;
+                for(uint8_t id_idx = 0; id_idx < num_probes_requested; ++id_idx){
+                    if( *(probes_requested + id_idx) == probe_sn){
+                        this_packet_requested = true;
+                    }
+                }
 
-                thistf.id = probe_sn;
-                thistf.q0 = (float)enabledTools[tool_idx].transform.q0;
-                thistf.q1 = (float)enabledTools[tool_idx].transform.qx;
-                thistf.q2 = (float)enabledTools[tool_idx].transform.qy;
-                thistf.q3 = (float)enabledTools[tool_idx].transform.qz;
-                thistf.tx = (float)enabledTools[tool_idx].transform.tx;
-                thistf.ty = (float)enabledTools[tool_idx].transform.ty;
-                thistf.tz = (float)enabledTools[tool_idx].transform.tz;
-                thistf.error = (float)enabledTools[tool_idx].transform.error;
-
-
+                // capture transform for transmission *unless* we're in listen mode and this wasn't in the request list
                 if( !(listen_mode && !this_packet_requested) ){    
+                    thistf.id = probe_sn;
+                    thistf.q0 = (float)enabledTools[tool_idx].transform.q0;
+                    thistf.q1 = (float)enabledTools[tool_idx].transform.qx;
+                    thistf.q2 = (float)enabledTools[tool_idx].transform.qy;
+                    thistf.q3 = (float)enabledTools[tool_idx].transform.qz;
+                    thistf.t0 = (float)enabledTools[tool_idx].transform.tx;
+                    thistf.t1 = (float)enabledTools[tool_idx].transform.ty;
+                    thistf.t2 = (float)enabledTools[tool_idx].transform.tz;
+                    thistf.error = (float)enabledTools[tool_idx].transform.error;
                     tforms.push_back(thistf);
-                    outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
+                    outfile << frame_num << "," << frame_num << "," << probe_sn << ",";
                     outfile << thistf.q0 << "," << thistf.q1 << "," << thistf.q2 << "," << thistf.q3 << ",";
                     outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
                     outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
                     outfile << thistf.error << endl;   
                 } 
-
-
-                // write packet to serial port and file
-                if(!client_port_string.empty()){
-                    if(listen_mode){
-                        if(probe_sn == probe_sn_req){
-                            mySerialPort->write(mypacket,mypacket_length);
-                            transform_sent = true;
-
-                            // write line to file
-                        }
-                    } else {
-                        mySerialPort->write(mypacket,mypacket_length);
-                        // write line to file
-                        outfile << frame_num << "," << frame_num << "," << tool_idx << ",";
-                        outfile << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ",";
-                        outfile << t[0] << "," << t[1] << "," << t[2] << ",";
-                        outfile << t[0] << "," << t[1] << "," << t[2] << ",";
-                        outfile << trk_fit_err << endl;   
-
-                    }
-                }
-
             }
         }
 
-
+        // now send a response packet with however many transforms (0 or more) we have accumulated
         mypacket_length = MAX_PACKET_LENGTH;
-        result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tool_idx, q, SIZE_Q, t, SIZE_T, trk_fit_err);
+        result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tforms);
         if( result != 0 ){
             printf("Error: unexpected result from packet composition (%d)\n",result);
             return -1;
         }
+        mySerialPort->write(mypacket,mypacket_length);
 
-
-
-        if(listen_mode && !transform_sent){
-            // TODO SEND NAK PACKET
-            printf("Error could not send requested transform!\n");
-        }
     }
 
     cout << "Stopping tracking" << endl;
