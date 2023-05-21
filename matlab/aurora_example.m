@@ -1,23 +1,31 @@
 % restart
 close all; clear; clc;
 
-PROBE_ID = '3CC3F000';  % pen probe coil
-% PROBE_ID = '3D4C7400';   % Yuan's coil for localization
+PROBE_ID_PENCOIL  = 0x3CC3F000;  % pen probe coil
+PROBE_ID_SPINE    = 0x3D4C7400;   % Yuan's coil for localization
 
 fser = serialport('COM7',115200,'DataBits',8,'FlowControl','none','StopBits',1,'Timeout',0.001);
 
 pkt = [];
 while(isempty(pkt))
-    requestAuroraPacket(fser,PROBE_ID);
+    requestAuroraPacket(fser,[PROBE_ID_PENCOIL PROBE_ID_SPINE]);
     pkt = getAuroraPacket(fser,0.2);
 end
 
 clear fser;
 
-T_coil_to_aurora = eye(4);
-T_coil_to_aurora(1:3,1:3) = quat2matrix(pkt(3:6));
-T_coil_to_aurora(1:3,4) = pkt(7:9);
-T_coil_to_aurora
+assert(mod(length(pkt)-1,9) == 0,'Incorrect packet size!');
+num_tforms = (length(pkt)-1)/9;
+all_tfs = [];
+for tf_idx = 1:num_tforms
+    all_tfs(tf_idx).sn = pkt(2+9*(tf_idx-1));
+    all_tfs(tf_idx).T_coil_to_aurora = eye(4);
+    all_tfs(tf_idx).T_coil_to_aurora(1:3,1:3) = quat2matrix(pkt((3:6)+9*(tf_idx-1)));
+    all_tfs(tf_idx).T_coil_to_aurora(1:3,4) = pkt((7:9)+9*(tf_idx-1));
+    all_tfs(tf_idx).error = pkt(10+9*(tf_idx-1));
+end
+
+all_tfs.T_coil_to_aurora
 
 
  

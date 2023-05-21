@@ -140,15 +140,18 @@ while(isempty(pkt) && (toc < timeout)) % TODO: provide more elegant method of ex
             % process packet by type-specific methods
             switch(pkt_type)
                 
-                % process IMU data packets
+                % process data packets
                 case PKT_TYPE_TRANSFORM_DATA 
                     
                     % flag to continue through error checks
                     proceed = true;
 
+                    num_tforms = uint8(thisMsg(4));
+
+
                     % check length
                     % TODO: include length as a field in protocol and/or check CRC8
-                    if( thisMsgLength ~= PKT_LENGTH_TRANSFORM_DATA )
+                    if( thisMsgLength ~= 11+36*num_tforms )
                         warning(['invalid message length (' num2str(length(thisMsg)) ') for packet type 0x' dec2hex(pkt_type) '!' ]);
                         proceed = false;
                     end
@@ -162,19 +165,22 @@ while(isempty(pkt) && (toc < timeout)) % TODO: provide more elegant method of ex
                     % convert data and put into packet
                     if(proceed)
                         %fprintf('Received packet!\n');
-                        pkt(1,1) = typecast(uint8(thisMsg(4:7)),'uint32');    % frame_num
-                        pkt(1,2) = thisMsg(8);                                % tool_idx
-                        pkt(1,3) = typecast(uint8(thisMsg(9:12)),'single');   % q0
-                        pkt(1,4) = typecast(uint8(thisMsg(13:16)),'single');  % q1
-                        pkt(1,5) = typecast(uint8(thisMsg(17:20)),'single');  % q2
-                        pkt(1,6) = typecast(uint8(thisMsg(21:24)),'single');  % q3
-                        pkt(1,7) = typecast(uint8(thisMsg(25:28)),'single');  % tx
-                        pkt(1,8) = typecast(uint8(thisMsg(29:32)),'single');  % ty
-                        pkt(1,9) = typecast(uint8(thisMsg(33:36)),'single');  % tz
-                        pkt(1,10) = typecast(uint8(thisMsg(37:40)),'single'); % error
+                        pkt(1,1) = typecast(uint8(thisMsg(5:8)),'uint32');    % frame num
+                        for tform_idx = double(0:(num_tforms-1))
+                            pkt(1,2+9*tform_idx) = typecast(uint8(thisMsg((9:12)+36*tform_idx)),'uint32');   % tool s/n
+                            pkt(1,3+9*tform_idx) = typecast(uint8(thisMsg((13:16)+36*tform_idx)),'single');  % q0
+                            pkt(1,4+9*tform_idx) = typecast(uint8(thisMsg((17:20)+36*tform_idx)),'single');  % q1
+                            pkt(1,5+9*tform_idx) = typecast(uint8(thisMsg((21:24)+36*tform_idx)),'single');  % q2
+                            pkt(1,6+9*tform_idx) = typecast(uint8(thisMsg((25:28)+36*tform_idx)),'single');  % q3
+                            pkt(1,7+9*tform_idx) = typecast(uint8(thisMsg((29:32)+36*tform_idx)),'single');  % tx
+                            pkt(1,8+9*tform_idx) = typecast(uint8(thisMsg((33:36)+36*tform_idx)),'single');  % ty
+                            pkt(1,9+9*tform_idx) = typecast(uint8(thisMsg((37:40)+36*tform_idx)),'single');  % tz
+                            pkt(1,10+9*tform_idx) = typecast(uint8(thisMsg((41:44)+36*tform_idx)),'single'); % error
+                        end
                     end
                    
                 otherwise
+                    % TODO: PROCESS AT LEAST NAK PACKETS
                     warning(['Packet type 0x' dec2hex(mtype) ' not supported!']);
                     
             end  % end of switch(mType)
