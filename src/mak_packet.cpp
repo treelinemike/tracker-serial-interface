@@ -96,6 +96,11 @@ int compose_tracker_packet(uint8_t* packet, size_t *packet_length, uint32_t fram
         return result;
     //printf("Done. CRC = 0x%02X\n",CRC);
 
+    // add number of transforms
+    *temp_packet = tforms.size();
+    if((result = add_bytes_to_packet(temp_packet, 1, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
+        return result;
+
     // add frame number
     //printf("Adding frame number\n");
     if((result = add_bytes_to_packet((uint8_t*)(&frame_num), 4, packet, packet_length, max_packet_length, &CRC, true, true)) != 0)
