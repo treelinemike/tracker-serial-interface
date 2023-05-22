@@ -18,8 +18,8 @@
 #define REQUIRE_AURORA false
 #define REQUIRE_CLIENT false
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT "/dev/ttyUSB0"
-#define STATIC_PORT_AURORA "/dev/ttyUSB1"
+#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
+#define STATIC_PORT_AURORA "/dev/ttyUSB0"
 #define BAUDRATE 115200U
 #define BYTE_BUFFER_LENGTH 2048
 #define PACKET_BUFFER_LENGTH 255
