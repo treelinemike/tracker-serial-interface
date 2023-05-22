@@ -24,8 +24,11 @@ for tf_idx = 1:num_tforms
     all_tfs(tf_idx).T_coil_to_aurora(1:3,4) = pkt((7:9)+9*(tf_idx-1));
     all_tfs(tf_idx).error = pkt(10+9*(tf_idx-1));
 end
-
-all_tfs.T_coil_to_aurora
+if(num_tforms)
+    all_tfs.T_coil_to_aurora
+else
+    warning('No transforms returned!');
+end
 
 
  
