@@ -166,7 +166,7 @@ while(isempty(pkt) && (toc < timeout)) % TODO: provide more elegant method of ex
                     if(proceed)
                         %fprintf('Received packet!\n');
                         pkt(1,1) = typecast(uint8(thisMsg(5:8)),'uint32');    % frame num
-                        for tform_idx = double(0:(num_tforms-1))
+                        for tform_idx = double(0:(double(num_tforms)-1))
                             pkt(1,2+9*tform_idx) = typecast(uint8(thisMsg((9:12)+36*tform_idx)),'uint32');   % tool s/n
                             pkt(1,3+9*tform_idx) = typecast(uint8(thisMsg((13:16)+36*tform_idx)),'single');  % q0
                             pkt(1,4+9*tform_idx) = typecast(uint8(thisMsg((17:20)+36*tform_idx)),'single');  % q1
