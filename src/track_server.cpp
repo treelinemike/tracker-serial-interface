@@ -431,7 +431,7 @@ int main(int argc, char** argv){
             printf("Error: unexpected result from packet composition (%d)\n",result);
             return -1;
         }
-        cout << "Writing packet to serial port..." << endl;
+        //cout << "Writing packet to serial port..." << endl;
         mySerialPort->write(mypacket,mypacket_length);
 
     }
