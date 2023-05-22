@@ -1,8 +1,8 @@
 % restart
 close all; clear; clc;
 
-PROBE_ID_PENCOIL  = 0x3CC3F000;  % pen probe coil
-PROBE_ID_SPINE    = 0x3D4C7400;   % Yuan's coil for localization
+PROBE_ID_PENCOIL  = 0x3CC3F000;   % pen probe coil
+PROBE_ID_SPINE    = 0x3D4C7400;   % Brook's spine coil
 
 fser = serialport('COM7',115200,'DataBits',8,'FlowControl','none','StopBits',1,'Timeout',0.001);
 
