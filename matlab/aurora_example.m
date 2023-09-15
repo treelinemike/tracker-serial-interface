@@ -1,14 +1,14 @@
 % restart
 close all; clear; clc;
 
-PROBE_ID_PENCOIL  = 0x3CC3F000;   % pen probe coil
-PROBE_ID_SPINE    = 0x3D4C7400;   % Brook's spine coil
+PROBE_ID_PENCOIL  = '0A';   % pen probe coil
+PROBE_ID_SPINE    = '0B';   % Brook's spine coil
 
-fser = serialport('COM7',115200,'DataBits',8,'FlowControl','none','StopBits',1,'Timeout',0.001);
+fser = serialport('COM13',115200,'DataBits',8,'FlowControl','none','StopBits',1,'Timeout',0.001);
 
 pkt = [];
 while(isempty(pkt))
-    requestAuroraPacket(fser,[PROBE_ID_PENCOIL PROBE_ID_SPINE]);
+    requestAuroraPacket(fser,{PROBE_ID_PENCOIL PROBE_ID_SPINE});
     pkt = getAuroraPacket(fser,0.2);
 end
 
