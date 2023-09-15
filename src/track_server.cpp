@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string>
+#include <cstring>
 #include <thread>
 #include <mutex>
 #include <cassert>
@@ -105,6 +106,8 @@ int main(int argc, char** argv){
     bool capture_requested = false;
     uint8_t data_size;
     uint8_t *packet_buffer;
+    char * p_phcstr;  // pointer to port handle c string
+    char * p_reqcstr; // pointer to requested probe c string
 
     // parse command line options
     // the add_options() syntax is a little strange, see: https://stackoverflow.com/questions/50844804
@@ -248,8 +251,8 @@ int main(int argc, char** argv){
 
     // attempt to initialize NDI common API
     if( (result = capi.initialize()) < 0 ){
-    cout << "Error initializing NDI common api: " << capi.errorToString(result) << endl;
-    return -1;
+        cout << "Error initializing NDI common api: " << capi.errorToString(result) << endl;
+        return -1;
     }
 
     // THIS SLEEP IS SUPER IMPORTANT!
@@ -261,8 +264,11 @@ int main(int argc, char** argv){
 
     // initialize and enable tools
     initializeAndEnableTools(enabledTools);
-
     cout << "Number of tools found: " << enabledTools.size() << endl;
+    for(unsigned long tid = 0; tid < enabledTools.size(); ++tid){
+        cout << tid << " -> " << enabledTools[tid].toolInfo << endl;
+        //cout << tid << " -> " << enabledTools[tid].getSerialNumber() << endl;
+    }
 
     // enter tracking mode
     cout << "Entering tracking mode" << endl;
@@ -335,7 +341,9 @@ int main(int argc, char** argv){
                             printf("Requested transform for probes(s):");
                             for(uint8_t id_idx = 0; id_idx < data_size; ++id_idx){
                                 memcpy((probes_requested+num_probes_requested),packet_buffer+4+4*id_idx,4);
-                                printf(" 0x%08X",*(probes_requested + num_probes_requested));
+                                p_reqcstr = (char*)(probes_requested+num_probes_requested);
+                                printf(" %s",p_reqcstr);
+                                //printf(" 0x%08X",*(probes_requested + num_probes_requested));
                                 ++num_probes_requested;
                             }
                             printf("\n");
@@ -380,16 +388,19 @@ int main(int argc, char** argv){
             // get the current frame number
             frame_num = (uint32_t) enabledTools[tool_idx].frameNumber;
 
-            // get tool serial number, convert from cstr to integer
-            probe_sn = (uint32_t)strtol(enabledTools[tool_idx].toolInfo.c_str()+3,nullptr,16);
+            // get tool serial number REALLY PORT NUMBER, convert from cstr to integer
+            strcpy((char *)&probe_sn,enabledTools[tool_idx].toolInfo.c_str());
+            p_phcstr = (char *)&probe_sn; 
+            //probe_sn = (uint32_t)strtol(enabledTools[tool_idx].toolInfo.c_str()+3,nullptr,16);
             if(tool_idx == 0){           
-                cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tools:";
+                cout << "Caputure " << cap_num << ", Frame " << frame_num << " Tools in frame:" << endl;
             }
-            printf(" 0x%04X",probe_sn); // TODO: do this the c++ way with cout
+            //printf("%ld",tool_idx);
+            printf("* %s",p_phcstr); // TODO: do this the c++ way with cout
             if( enabledTools[tool_idx].transform.isMissing() ){
-                cout << " --> MISSING!";
+                cout << " --> MISSING!" << endl;
             } else if( frame_num == prev_frame_num ){
-                cout << " --> REPEAT!";
+                cout << " --> REPEAT!" << endl;
             } else {
                 if(!wait_for_keypress){
                     cout << endl;
@@ -398,7 +409,9 @@ int main(int argc, char** argv){
                 // determine whether this was one of the transforms we requested
                 bool this_packet_requested = false;
                 for(uint8_t id_idx = 0; id_idx < num_probes_requested; ++id_idx){
-                    if( *(probes_requested + id_idx) == probe_sn){
+                    p_reqcstr = (char*)(probes_requested+id_idx);                
+                    if(!strcmp(p_phcstr,p_reqcstr)){
+                    //if( *(probes_requested + id_idx) == probe_sn){
                         this_packet_requested = true;
                     }
                 }
@@ -507,7 +520,12 @@ void initializeAndEnableTools(std::vector<ToolData>& enabledTools)
     {
         enabledTools.push_back(ToolData());
         enabledTools.back().transform.toolHandle = (uint16_t)capi.stringToInt(portHandles[i].getPortHandle());
-        enabledTools.back().toolInfo = getToolInfo(portHandles[i].getPortHandle());
+        
+        // 15-SEP-23: NDI (mostly) confirmed that our tools won't have S/Ns, so we're loading the two-byte port index string into toolInfo
+        enabledTools.back().toolInfo = portHandles[i].getPortHandle();  //getToolInfo(portHandles[i].getPortHandle());
+        //cout << "FOUND TOOL S/N: " << portHandles[i].getSerialNumber() << endl;
+        //cout << "string length: " << portHandles[i].getSerialNumber().length() << endl;
+        //cout << "getPortHandle() = " << portHandles[i].getPortHandle() << endl;
     }
 }
 
