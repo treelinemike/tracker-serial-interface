@@ -428,7 +428,7 @@ int main(int argc, char** argv){
                     thistf.t2 = (float)enabledTools[tool_idx].transform.tz;
                     thistf.error = (float)enabledTools[tool_idx].transform.error;
                     tforms.push_back(thistf);
-                    outfile << frame_num << "," << frame_num << "," << probe_sn << ",";
+                    outfile << frame_num << "," << frame_num << "," << p_phcstr/*[strlen(p_phcstr)-1]*/ << ",";
                     outfile << thistf.q0 << "," << thistf.q1 << "," << thistf.q2 << "," << thistf.q3 << ",";
                     outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
                     outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
