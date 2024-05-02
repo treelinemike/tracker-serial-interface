@@ -138,6 +138,7 @@ int main(int argc, char** argv){
     } else {
         cout << "Writing output to: output.csv" << endl;
         outfile.open("output.csv");
+        outfile << "aurora_time,aurora_time2,tool_id,q0,q1,q2,q3,tx,ty,tz,tx_tip,ty_tip,tz_tip,reg_error,capture_note" << endl;
     }
 
     // ensure that we're on a linux system
@@ -432,7 +433,7 @@ int main(int argc, char** argv){
                     outfile << thistf.q0 << "," << thistf.q1 << "," << thistf.q2 << "," << thistf.q3 << ",";
                     outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
                     outfile << thistf.t0 << "," << thistf.t1 << "," << thistf.t2 << ",";
-                    outfile << thistf.error << endl;   
+                    outfile << thistf.error << "," << endl;   
                 } 
             }
         }
