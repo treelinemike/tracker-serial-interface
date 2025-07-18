@@ -16,10 +16,10 @@
 
 #define AURORA_PORT_DESC "NDI Aurora"
 #define CLIENT_PORT_DESC "Prolific Technology"
-#define REQUIRE_AURORA false
+#define REQUIRE_AURORA true
 #define REQUIRE_CLIENT false
 #define USE_STATIC_PORTS true
-#define STATIC_PORT_CLIENT "/dev/ttyUSB1"
+#define STATIC_PORT_CLIENT ""   // make this empty string if not using client!
 #define STATIC_PORT_AURORA "/dev/ttyUSB0"
 #define BAUDRATE 115200U
 #define BYTE_BUFFER_LENGTH 2048
@@ -108,6 +108,8 @@ int main(int argc, char** argv){
     uint8_t *packet_buffer;
     char * p_phcstr;  // pointer to port handle c string
     char * p_reqcstr; // pointer to requested probe c string
+
+    std::thread *serial_thread;
 
     // parse command line options
     // the add_options() syntax is a little strange, see: https://stackoverflow.com/questions/50844804
@@ -231,11 +233,12 @@ int main(int argc, char** argv){
         };
         mySerialPort->flush();
         cout << "done." << endl;
+       
+       // start thread to read messages from the client
+       printf("Starting thread to read from client serial connection...\n");
+       serial_thread = new std::thread(monitor_serial_port,mySerialPort);
     }
 
-    // start thread to read messages from the client
-    printf("Starting thread to read from client serial connection...\n");
-    std::thread serial_thread(monitor_serial_port,mySerialPort);
 
     // open aurora serial port
     if(capi.connect(aurora_port_string) != 0){
@@ -403,7 +406,7 @@ int main(int argc, char** argv){
             } else if( frame_num == prev_frame_num ){
                 cout << " --> REPEAT!" << endl;
             } else {
-                if(!wait_for_keypress){
+                if(!wait_for_keypress || (tool_idx < enabledTools.size()-1)){
                     cout << endl;
                 }
 
@@ -439,6 +442,8 @@ int main(int argc, char** argv){
         }
 
         // now send a response packet with however many transforms (0 or more) we have accumulated
+        if(!client_port_string.empty()){            
+        
         mypacket_length = MAX_PACKET_LENGTH;
         result = compose_tracker_packet(mypacket, &mypacket_length, frame_num, tforms);
         if( result != 0 ){
@@ -447,7 +452,7 @@ int main(int argc, char** argv){
         }
         //cout << "Writing packet to serial port..." << endl;
         mySerialPort->write(mypacket,mypacket_length);
-
+        }
     }
 
     cout << "Stopping tracking" << endl;
@@ -460,11 +465,11 @@ int main(int argc, char** argv){
     // close output file
     outfile.close();
 
-    // join read thread
-    serial_thread.join();
 
     // close serial port
     if(!client_port_string.empty()){            
+        // join read thread
+        serial_thread->join();
         cout << "Closing serial port" << endl;
         mySerialPort->close();
     }
@@ -545,6 +550,7 @@ void monitor_serial_port(Serial* mySerialPort){
     uint8_t *p_packet_end = packet_buffer + PACKET_BUFFER_LENGTH;
     uint8_t CRC_received, CRC_computed;
     uint8_t packet_type;
+    uint8_t *p_display;
 
     // start adding to beginning of byte buffer
     p_byte = byte_buffer;
@@ -594,13 +600,13 @@ void monitor_serial_port(Serial* mySerialPort){
                     p_byte = byte_buffer;
                 }
             }
-            //printf("p_byte is %ld bytes ahead of buffer start\n",p_byte-byte_buffer);
+            printf("p_byte is %ld bytes ahead of buffer start\n",p_byte-byte_buffer);
         } else {
             //printf("Found start\n");
             //back up pointer to the DLE
             --p_start_search;
 
-            /* DEBUG  
+            /* DEBUG */ 
                printf("Byte buffer from start of message: ");
                p_display = p_start_search;
                while(p_display < p_byte){
@@ -608,7 +614,7 @@ void monitor_serial_port(Serial* mySerialPort){
                ++p_display;
                }
                printf("\n");
-               */
+               /**/
         }
 
         // try to find DLE ETX
