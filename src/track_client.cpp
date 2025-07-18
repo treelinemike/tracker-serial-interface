@@ -1,4 +1,4 @@
-#include "serial/serial.h" // https://www.github.com/wjwwood/serial
+#include "serial_cpp/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
 #include <iostream>
 #include <fstream>
@@ -18,7 +18,7 @@
 #define PACKET_BUFFER_LENGTH 255
 
 using namespace std;
-using namespace serial;
+using namespace serial_cpp;
 
 int main(void){
 

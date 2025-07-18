@@ -1,4 +1,4 @@
-#include "serial/serial.h" // https://www.github.com/wjwwood/serial
+#include "serial_cpp/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
 #include <iostream>
 #include <fstream>
@@ -23,7 +23,7 @@
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 using namespace std;
-using namespace serial;
+using namespace serial_cpp;
 
 // simple class for representing a serial message
 class SimpleMsg {

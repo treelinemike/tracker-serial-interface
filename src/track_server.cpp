@@ -1,4 +1,4 @@
-#include "serial/serial.h" // https://www.github.com/wjwwood/serial
+#include "serial_cpp/serial.h" // https://www.github.com/wjwwood/serial
 #include "mak_packet.h"
 #include "cxxopts/cxxopts.hpp" // https://www.github.com/jarro2783/cxxopts
 #include <CombinedApi.h>
@@ -28,7 +28,7 @@
 #define MAX_PROBES 4
 
 using namespace std;
-using namespace serial;
+using namespace serial_cpp;
 
 
 // TODO: refactor into headers, etc.

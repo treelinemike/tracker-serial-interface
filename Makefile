@@ -5,8 +5,8 @@ LIB = /usr/local/lib
 
 CC = g++
 CFLAGS = -no-pie -pthread -Wall
-LDFLAGS_SERVER = -lserial -lpthread -lndicapi
-LDFLAGS_CLIENT = -lserial -lpthread
+LDFLAGS_SERVER = -lserial_cpp -lpthread -lndicapi
+LDFLAGS_CLIENT = -lserial_cpp -lpthread
 
 INC_SYS_PARAMS = $(addprefix -isystem,$(INCLUDE_SYS))
 INC_PARAMS = $(addprefix -I,$(INCLUDE))
